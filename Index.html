@@ -38,10 +38,12 @@
     return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
   }
 
+  // Clip and sanitize field name/value for Discord limits & invalid characters
   function sanitizeFieldName(name) {
     if (!name) return "N/A";
     name = name.toString().trim();
     if (name.length === 0) return "N/A";
+    name = name.replace(/[\u0000-\u001F\u007F]/g, ""); // remove control chars
     return name.length > 256 ? name.slice(0, 253) + "..." : name;
   }
 
@@ -49,6 +51,7 @@
     if (value === undefined || value === null) return "N/A";
     value = value.toString().trim();
     if (value.length === 0) return "N/A";
+    value = value.replace(/[\u0000-\u001F\u007F]/g, ""); // remove control chars
     return value.length > 1024 ? value.slice(0, 1021) + "..." : value;
   }
 
@@ -96,7 +99,7 @@
 
     if (cleanEmbeds.length === 0) throw new Error("No valid embed fields after sanitizing");
 
-    // Chunk embeds into batches of 5
+    // Chunk embeds into batches of 5 (Discord max embeds per message)
     const embedBatches = chunkArray(cleanEmbeds, 5);
 
     for (let i = 0; i < embedBatches.length; i++) {
