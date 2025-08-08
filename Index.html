@@ -90,10 +90,9 @@
           const name = sanitizeFieldName(f.name);
           const value = sanitizeFieldValue(f.value);
           return { name, value, inline: !!f.inline };
-        })
-        .filter(f => f.name !== "N/A" && f.value !== "N/A");
+        });
       return embed;
-    }).filter(e => e.fields && e.fields.length > 0);
+    });
 
     if (cleanEmbeds.length === 0) throw new Error("No valid embed fields after sanitizing");
 
