@@ -3,7 +3,7 @@ exports.handler = async function(event, context) {
     const data = JSON.parse(event.body);
     const webhookUrl = "https://discord.com/api/webhooks/1403468598286221333/d15xSrnNqkAJ_jk5cnGqcLh8oigcdjJlZHj7t9aqM4DDmQ5K9Rif6jVdewyWrAFr8Hcg";
 
-    // Use native fetch (Netlify Node 18+)
+    // Use native fetch in Netlify functions (Node 18+)
     const res = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
