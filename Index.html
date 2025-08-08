@@ -38,7 +38,6 @@
     return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
   }
 
-  // Sanitize embed field name/value for Discord limits
   function sanitizeFieldName(name) {
     if (!name) return "N/A";
     name = name.toString();
@@ -78,7 +77,6 @@
   async function sendDiscordWebhook(embeds) {
     if (!embeds || embeds.length === 0) throw new Error("No embeds to send");
 
-    // Clean embeds: sanitize names and values, but keep all fields including N/A
     const cleanEmbeds = embeds.map(embed => {
       if (!embed.fields || embed.fields.length === 0) return embed;
       embed.fields = embed.fields
@@ -92,14 +90,27 @@
 
     if (cleanEmbeds.length === 0) throw new Error("No valid embed fields after sanitizing");
 
-    const res = await fetch(netlifyFunctionUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embeds: cleanEmbeds }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Discord webhook error: ${res.status} - ${text}`);
+    try {
+      const res = await fetch(netlifyFunctionUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ embeds: cleanEmbeds }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Discord webhook error: ${res.status} - ${text}`);
+      }
+    } catch (e) {
+      // Show full payload in error div on failure
+      const errorDiv = document.getElementById('error-message');
+      errorDiv.style.display = 'block';
+      errorDiv.textContent = `❌ Discord webhook error:\n\n${e.message}\n\nPayload:\n${JSON.stringify({ embeds: cleanEmbeds }, null, 2)}\n\nTap to copy`;
+      errorDiv.onclick = () => {
+        navigator.clipboard.writeText(errorDiv.textContent)
+          .then(() => alert("Error and payload copied! Send it to me."))
+          .catch(() => alert("Failed to copy."));
+      };
+      throw e; // Re-throw after showing error
     }
   }
 
@@ -170,9 +181,8 @@
       await sendDiscordWebhook(embedChunks);
 
     } catch (err) {
-      const errorDiv = document.getElementById('error-message');
       errorDiv.style.display = 'block';
-      errorDiv.textContent = `❌ Error: ${err.message}\n\nClick to copy`;
+      errorDiv.textContent = `❌ Error: ${err.message}\n\nTap to copy`;
       errorDiv.onclick = () => {
         navigator.clipboard.writeText(err.message)
           .then(() => alert("Error message copied! Send it to me."))
